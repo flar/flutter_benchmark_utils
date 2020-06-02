@@ -7,7 +7,7 @@ found in the LICENSE file. -->
     <!--Load the AJAX API-->
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="graphAB-results.js"></script>
+    <script src="graphTimeline-results.js"></script>
     <script type="text/javascript">
 
       // Load the Visualization API and the Material chart package.
@@ -17,14 +17,16 @@ found in the LICENSE file. -->
       google.charts.setOnLoadCallback(drawCharts);
 
       function drawCharts() {
-        if (graphAB_data) {
+        if (graphTimeline_data) {
           clearCharts();
-          makeCharts(graphAB_data);
+          makeCharts(graphTimeline_data);
         }
       }
 
-      var kLocalResultsName = 'local_engine_results';
-      var kDefaultResultsName = 'default_results';
+      var kBuildBeginName = 'frame_begin_times';
+      var kBuildDurationName = 'frame_build_times';
+      var kRenderBeginName = 'frame_rasterizer_begin_times';
+      var kRenderDurationName = 'frame_rasterizer_times';
 
       function combinedKeys(resultsA, resultsB) {
         var combinedKeys = Object.keys(resultsA);
@@ -61,7 +63,7 @@ found in the LICENSE file. -->
           var fileReader = new FileReader();
           fileReader.onload = function(e) {
             var data = jQuery.parseJSON(fileReader.result);
-            graphAB_data = data;
+            AB_data = data;
             drawCharts();
           };
           fileReader.readAsText(input.files[0]);
@@ -76,13 +78,14 @@ found in the LICENSE file. -->
         }
       }
 
-      function makeCharts(graphAB_data) {
-        var localResults = graphAB_data[kLocalResultsName];
-        var defaultResults = graphAB_data[kDefaultResultsName];
+      function makeCharts(AB_data) {
+        var build_begin_times = graphTimeline_data[kBuildBeginName];
+        var build_durations = graphTimeline_data[kBuildDurationName];
+        var render_begin_times = graphTimeline_data[kRenderBeginName];
+        var render_durations = graphTimeline_data[kRenderDurationName];
         var grid = document.getElementById('all_charts_flow');
-        combinedKeys(localResults, defaultResults).forEach(key => {
-          grid.appendChild(makeChartFromType(key, localResults, defaultResults));
-        });
+        grid.appendChild(makeTimeChart(render_begin_times, render_durations, 'rasterization'));
+        grid.appendChild(makeTimeChart(build_begin_times, build_durations, 'frame build'));
         for (var chart_key in charts_by_type) {
           var info = charts_by_type[chart_key];
           info.chart.draw(info.data, info.options);
@@ -138,43 +141,39 @@ found in the LICENSE file. -->
         return button;
       }
 
-      function makeChartFromType(type, localResults, defaultResults) {
-        var localTimes = localResults[type];
-        var defaultTimes = defaultResults[type];
-        if (localTimes || defaultTimes) {
-          return makeDiv(
-            'results_' + type,
-            'padding: 5px; border-color: #black;',
-            makeChart(localTimes, defaultTimes, type),
-            makeDiv(
-              'controls_' + type,
-              'padding-top: 10px;',
-              makeButton('Save as PNG', function() { clicked(type); }),
-            ),
-          );
+      function makeTimeChart(begin_times, durations, type) {
+        var indexType = 'timestamp';
+        if (begin_times == null) {
+          indexType = 'frame';
+          begin_times = [];
+          var frame = 1;
+          for (var dur in durations) {
+            begin_times += frame;
+            frame++;
+          }
         }
-
-        console.log('could not make a chart for: ' + type);
-        return null;
+        return makeDiv(
+          type,
+          'padding: 5px; border-color: #black;',
+          makeChart(begin_times, durations, type, indexType),
+          makeDiv(
+            'controls_' + type,
+            'padding-top: 10px;',
+            makeButton('Save as PNG', function() { clicked(type); }),
+          ),
+        );
       }
 
-      function makeChart(localTimes, defaultTimes, resultsType) {
+      function makeChart(begin_times, durations, type, indexType) {
         var data = new google.visualization.DataTable();
-        data.addColumn('string', '');
-        var len = Math.max(localTimes ? localTimes.length : 0,
-                           defaultTimes ? defaultTimes.length : 0);
-        for (i = 0; i < len; i++) {
-          data.addColumn('number', 'Run '+(i+1));
-        }
-        if (localTimes) {
-          data.addRow([ 'local engine',   ...localTimes ]);
-        }
-        if (defaultTimes) {
-          data.addRow([ 'default engine', ...defaultTimes ]);
+        data.addColumn('number', 'frame');
+        data.addColumn('number', 'duration in ms');
+        for (var i = 0; i < durations.length; i++) {
+          data.addRow([ begin_times[i], durations[i] ]);
         }
 
         var options = {
-          title: resultsType,
+          title: type,
           legend: {
             position: 'none',
           },
@@ -191,13 +190,13 @@ found in the LICENSE file. -->
               fontSize: 12,
             },
           },
-          width: 400,
+          width: 800,
           height: 300,
         };
 
-        var chart_div = makeDiv('chart_' + resultsType, null);
-        var chart = new google.visualization.ColumnChart(chart_div);
-        charts_by_type[resultsType] = {
+        var chart_div = makeDiv('chart_' + type, null);
+        var chart = new google.visualization.LineChart(chart_div);
+        charts_by_type[type] = {
           chart: chart,
           data: data,
           options: options,

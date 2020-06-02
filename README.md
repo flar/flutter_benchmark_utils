@@ -4,6 +4,7 @@ Flutter package with scripts to graph and analyze Flutter benchmark output
 
 Currently the package exports the following executables:
 - graphAB --[no-]launch <ABresults.json file>
+- graphTimeline --[no-]launch <test.timeline_summary.json file>
 
 # Install
 
@@ -17,7 +18,9 @@ pub global activate -sgit http://github.com/flar/flutter_benchmark_utils
 ```
 
 # Run
-Run an AB benchmark using the benchmark tools in the Flutter dev/devicelab diretory, and then
+
+Run an AB benchmark using the benchmark tools in the Flutter dev/devicelab directory,
+and then
 ```shell
 pub global run flutter_benchmark_utils:graphAB ABresults.json
 ```
@@ -26,3 +29,12 @@ The script will provide a URL to click on to view the graphs, or you can use the
 option to just launch the web page in the system default browser.
 
 The executable will continue to run and host the URL until you type `q` to quit it.
+
+Run any timeline_summary benchmark using the benchmark tools in the Flutter dev/devicelab
+directory, and then
+```shell
+pub global run flutter_benchmark_utils:graphTimeline test.timeline_summary.json
+```
+
+The script behaves analogously to the graphAB script in terms of launching a browser and
+quitting.

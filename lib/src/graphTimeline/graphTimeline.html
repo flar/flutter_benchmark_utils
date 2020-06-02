@@ -28,6 +28,10 @@ found in the LICENSE file. -->
       var kRenderBeginName = 'frame_rasterizer_begin_times';
       var kRenderDurationName = 'frame_rasterizer_times';
 
+      function percentile(type, percent) {
+        return graphTimeline_data[percent + 'th_percentile_frame_' + type + '_time_millis'];
+      }
+
       function combinedKeys(resultsA, resultsB) {
         var combinedKeys = Object.keys(resultsA);
         var insertIndex = 0;
@@ -84,8 +88,10 @@ found in the LICENSE file. -->
         var render_begin_times = graphTimeline_data[kRenderBeginName];
         var render_durations = graphTimeline_data[kRenderDurationName];
         var grid = document.getElementById('all_charts_flow');
-        grid.appendChild(makeTimeChart(render_begin_times, render_durations, 'rasterization'));
-        grid.appendChild(makeTimeChart(build_begin_times, build_durations, 'frame build'));
+        grid.appendChild(makeTimeChart(render_begin_times, render_durations, 'rasterizer'));
+        grid.appendChild(makeTimeChart(build_begin_times, build_durations, 'build'));
+        grid.appendChild(makeDurationChart(render_durations, 'rasterizer'));
+        grid.appendChild(makeDurationChart(build_durations, 'build'));
         for (var chart_key in charts_by_type) {
           var info = charts_by_type[chart_key];
           info.chart.draw(info.data, info.options);
@@ -95,7 +101,7 @@ found in the LICENSE file. -->
       function svg2img(element) {
         var svg = element.getElementsByTagName('svg')[0];
         var xml = new XMLSerializer().serializeToString(svg);
-        var svg64 = btoa(xml); //for utf8: btoa(unescape(encodeURIComponent(xml)))
+        var svg64 = btoa(unescape(encodeURIComponent(xml)));
         var b64start = 'data:image/svg+xml;base64,';
         var image64 = b64start + svg64;
         return image64;
@@ -152,24 +158,41 @@ found in the LICENSE file. -->
             frame++;
           }
         }
+        var id = 'timeline_' + type;
         return makeDiv(
-          type,
+          id,
           'padding: 5px; border-color: #black;',
-          makeChart(begin_times, durations, type, indexType),
+          makeLineChart(begin_times, durations, id, indexType),
           makeDiv(
-            'controls_' + type,
+            'controls_' + id,
             'padding-top: 10px;',
-            makeButton('Save as PNG', function() { clicked(type); }),
+            makeButton('Save as PNG', function() { clicked(id); }),
           ),
         );
       }
 
-      function makeChart(begin_times, durations, type, indexType) {
+      function makeDurationChart(durations, type) {
+        var id = 'duration_' + type;
+        var cutoff90 = percentile(type, 90);
+        var cutoff99 = percentile(type, 99);
+        return makeDiv(
+          id,
+          'padding: 5px; border-color: #black;',
+          makeAreaChart(durations, cutoff90, cutoff99, id),
+          makeDiv(
+            'controls_' + id,
+            'padding-top: 10px;',
+            makeButton('Save as PNG', function() { clicked(id); }),
+          ),
+        );
+      }
+
+      function makeLineChart(begin_times, durations, type, indexType) {
         var data = new google.visualization.DataTable();
         data.addColumn('number', 'frame');
         data.addColumn('number', 'duration in ms');
         for (var i = 0; i < durations.length; i++) {
-          data.addRow([ begin_times[i], durations[i] ]);
+          data.addRow([ begin_times[i], durations[i] / 1000.0 ]);
         }
 
         var options = {
@@ -196,6 +219,66 @@ found in the LICENSE file. -->
 
         var chart_div = makeDiv('chart_' + type, null);
         var chart = new google.visualization.LineChart(chart_div);
+        charts_by_type[type] = {
+          chart: chart,
+          data: data,
+          options: options,
+          element: chart_div
+        };
+        return chart_div;
+      }
+
+      function makeAreaChart(durations, cutoff90, cutoff99, type) {
+        var sorted_durations = [ ...durations ].sort((a, b) => a - b);
+        var num90percent = durations.length * 9 / 10;
+        var num99percent = durations.length * 99 / 100;
+
+        var data = new google.visualization.DataTable();
+        data.addColumn('string', 'range');
+        data.addColumn('number', 'duration in ms');
+        data.addColumn({ role: 'style' });
+
+        for (var index in sorted_durations) {
+          var dur = sorted_durations[index] / 1000.0;
+          var name;
+          var color;
+          if (dur < cutoff90) {
+            name = 'Typical';
+            color = 'green';
+          } else if (dur < cutoff99) {
+            name = '90th percentile';
+            color = 'yellow';
+          } else {
+            name = '99th percentile';
+            color = 'red';
+          }
+          data.addRow([ name, dur, color ]);
+        }
+
+        var options = {
+          title: type,
+          legend: {
+            position: 'none',
+          },
+          //bars: 'horizontal',
+          chartArea: {
+            left: 30,
+            top:  50,
+            right: 20,
+            bottom: 20,
+          },
+          vAxis: {
+            minValue: 0,
+            textStyle: {
+              fontSize: 12,
+            },
+          },
+          width: 1200,
+          height: 300,
+        };
+
+        var chart_div = makeDiv('chart_' + type, null);
+        var chart = new google.visualization.AreaChart(chart_div);
         charts_by_type[type] = {
           chart: chart,
           data: data,

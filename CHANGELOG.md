@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.6] - 2020/06/03
+
+* gray bars for periods of no activity in timeline graphs
+
 ## [0.0.5] - 2020/06/03
 
 * indicate periods of no activity in the timeline graphs

@@ -124,7 +124,7 @@ found in the LICENSE file. -->
           var img_data = canvas.toDataURL('image/png');
           var link = document.createElement('a');
           link.href = img_data;
-          link.download = 'AB_'+type+'.png';
+          link.download = 'TL_'+type+'.png';
           link.click();
         }
         img_element.src = svg2img(info.element);
@@ -148,48 +148,13 @@ found in the LICENSE file. -->
       }
 
       function makeTimeChart(begin_times, durations, type) {
-        var indexType = 'seconds';
-        if (begin_times == null) {
-          indexType = 'frame';
-          begin_times = [];
-          var frame = 1;
-          for (var dur in durations) {
-            begin_times.push(frame);
-            frame++;
-          }
-        } else {
-          var adjusted_times = [];
-          var adjusted_durations = [];
-          var prev_end = 0;
-          var prev_dur = 0;
-          var gap = 35 / 1000.0;
-          var margin = 1 / 1000.0;
-          for (var index in begin_times) {
-            var begin = begin_times[index] / 1000.0 / 1000.0;
-            var dur = durations[index];
-            if (begin > prev_end + gap) {
-              adjusted_times.push(prev_end);
-              adjusted_durations.push(prev_dur);
-              adjusted_times.push(prev_end + margin);
-              adjusted_durations.push(0);
-              adjusted_times.push(begin - margin);
-              adjusted_durations.push(0);
-            }
-            adjusted_times.push(begin);
-            adjusted_durations.push(dur);
-            prev_end = begin + (dur / 1000.0 / 1000.0);
-            prev_dur = dur;
-          }
-          begin_times = adjusted_times;
-          durations = adjusted_durations;
-        }
         var id = 'timeline_' + type;
         var cutoff90 = percentile(type, 90);
         var cutoff99 = percentile(type, 99);
         return makeDiv(
           id,
           'padding: 5px; border-color: #black;',
-          makeLineChart(begin_times, durations, id, indexType, cutoff90, cutoff99),
+          makeTimelineChart(begin_times, durations, id, cutoff90, cutoff99),
           makeDiv(
             'controls_' + id,
             'padding-top: 10px;',
@@ -205,7 +170,7 @@ found in the LICENSE file. -->
         return makeDiv(
           id,
           'padding: 5px; border-color: #black;',
-          makeAreaChart(durations, cutoff90, cutoff99, id),
+          makeDistributionChart(durations, id, cutoff90, cutoff99),
           makeDiv(
             'controls_' + id,
             'padding-top: 10px;',
@@ -215,9 +180,9 @@ found in the LICENSE file. -->
       }
 
       function color_for(dur, cutoff90, cutoff99) {
-        if (dur < cutoff90) return 'green';
-        if (dur < cutoff99) return 'orange';
-        return 'red';
+        if (dur < cutoff90) return 'color: green';
+        if (dur < cutoff99) return 'color: orange';
+        return 'color: red';
       }
 
       function label_for(dur, cutoff90, cutoff99) {
@@ -226,16 +191,62 @@ found in the LICENSE file. -->
         return '99th percentile';
       }
 
-      function makeLineChart(begin_times, durations, type, indexType, cutoff90, cutoff99) {
+      function makeTimelineChart(begin_times, durations, type, cutoff90, cutoff99) {
+        var indexUnits;
+        var max_dur = 0;
+        if (begin_times == null) {
+          indexUnits = 'frame';
+          begin_times = [];
+          var frame = 1;
+          for (var i = 0; i < durations.length; i++) {
+            begin_times.push(frame++);
+            var dur = durations[i] / 1000.0;
+            if (dur > max_dur) max_dur = dur;
+            durations[i] = dur;
+          }
+        } else {
+          indexUnits = 'seconds';
+          var adjusted_times = [];
+          var adjusted_durations = [];
+          var prev_end = 0;
+          var prev_dur = 0;
+          var gap = 35;
+          var margin = 1;
+          for (var i = 0; i < durations.length; i++) {
+            var begin = begin_times[i] / 1000.0;
+            var dur = durations[i] / 1000.0;
+            if (dur > max_dur) max_dur = dur;
+            if (begin > prev_end + gap) {
+              adjusted_times.push(prev_end / 1000.0);
+              adjusted_durations.push(prev_dur);
+              adjusted_times.push((prev_end + margin) / 1000.0);
+              adjusted_durations.push(0);
+              adjusted_times.push((begin - margin) / 1000.0);
+              adjusted_durations.push(0);
+            }
+            adjusted_times.push(begin / 1000.0);
+            adjusted_durations.push(dur);
+            prev_end = begin + dur;
+            prev_dur = dur;
+          }
+          begin_times = adjusted_times;
+          durations = adjusted_durations;
+        }
+        max_dur = max_dur * 1.1;
+
         var data = new google.visualization.DataTable();
-        data.addColumn('number', indexType);
+        data.addColumn('number', indexUnits);
         data.addColumn('number', 'duration in ms');
         data.addColumn({ role: 'style' });
+        data.addColumn('number', 'idle indicator');
+        data.addColumn({ role: 'style' });
 
+        var idle_style = 'color: lightGray; stroke-width: 0';
         for (var i = 0; i < durations.length; i++) {
-          var dur = durations[i] / 1000.0;
+          var dur = durations[i];
           var color = color_for(dur, cutoff90, cutoff99);
-          data.addRow([ begin_times[i], dur, color ]);
+          var idle = (dur == 0) ? 1 : 0;
+          data.addRow([ begin_times[i], dur, color, idle, idle_style ]);
         }
 
         var options = {
@@ -250,11 +261,22 @@ found in the LICENSE file. -->
             right: 20,
             bottom: 20,
           },
-          vAxis: {
-            minValue: 0,
-            textStyle: {
-              fontSize: 12,
+          series: {
+            0: {targetAxisIndex: 0},
+            1: {targetAxisIndex: 1},
+          },
+          vAxes: {
+            0: {
+              minValue: 0,
+              textStyle: {
+                fontSize: 12,
+              },
             },
+            1: {
+              minValue: 0,
+              maxValue: 1,
+              ticks: [],
+            }
           },
           width: 1200,
           height: 300,
@@ -271,7 +293,7 @@ found in the LICENSE file. -->
         return chart_div;
       }
 
-      function makeAreaChart(durations, cutoff90, cutoff99, type) {
+      function makeDistributionChart(durations, type, cutoff90, cutoff99) {
         var sorted_durations = [ ...durations ].sort((a, b) => a - b);
 
         var data = new google.visualization.DataTable();

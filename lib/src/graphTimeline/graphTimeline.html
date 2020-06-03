@@ -148,21 +148,30 @@ found in the LICENSE file. -->
       }
 
       function makeTimeChart(begin_times, durations, type) {
-        var indexType = 'timestamp';
+        var indexType = 'seconds';
         if (begin_times == null) {
           indexType = 'frame';
           begin_times = [];
           var frame = 1;
           for (var dur in durations) {
-            begin_times += frame;
+            begin_times.push(frame);
             frame++;
           }
+        } else {
+          var adjusted_times = [];
+          for (var index in begin_times) {
+            adjusted_times.push(begin_times[index] / 1000.0 / 1000.0);
+          }
+          console.log(adjusted_times);
+          begin_times = adjusted_times;
         }
         var id = 'timeline_' + type;
+        var cutoff90 = percentile(type, 90);
+        var cutoff99 = percentile(type, 99);
         return makeDiv(
           id,
           'padding: 5px; border-color: #black;',
-          makeLineChart(begin_times, durations, id, indexType),
+          makeLineChart(begin_times, durations, id, indexType, cutoff90, cutoff99),
           makeDiv(
             'controls_' + id,
             'padding-top: 10px;',
@@ -187,12 +196,28 @@ found in the LICENSE file. -->
         );
       }
 
-      function makeLineChart(begin_times, durations, type, indexType) {
+      function color_for(dur, cutoff90, cutoff99) {
+        if (dur < cutoff90) return 'green';
+        if (dur < cutoff99) return 'orange';
+        return 'red';
+      }
+
+      function label_for(dur, cutoff90, cutoff99) {
+        if (dur < cutoff90) return 'Nominal';
+        if (dur < cutoff99) return '90th percentile';
+        return '99th percentile';
+      }
+
+      function makeLineChart(begin_times, durations, type, indexType, cutoff90, cutoff99) {
         var data = new google.visualization.DataTable();
         data.addColumn('number', 'frame');
         data.addColumn('number', 'duration in ms');
+        data.addColumn({ role: 'style' });
+
         for (var i = 0; i < durations.length; i++) {
-          data.addRow([ begin_times[i], durations[i] / 1000.0 ]);
+          var dur = durations[i] / 1000.0;
+          var color = color_for(dur, cutoff90, cutoff99);
+          data.addRow([ begin_times[i], dur, color ]);
         }
 
         var options = {
@@ -213,12 +238,12 @@ found in the LICENSE file. -->
               fontSize: 12,
             },
           },
-          width: 800,
+          width: 1200,
           height: 300,
         };
 
         var chart_div = makeDiv('chart_' + type, null);
-        var chart = new google.visualization.LineChart(chart_div);
+        var chart = new google.visualization.AreaChart(chart_div);
         charts_by_type[type] = {
           chart: chart,
           data: data,
@@ -230,8 +255,6 @@ found in the LICENSE file. -->
 
       function makeAreaChart(durations, cutoff90, cutoff99, type) {
         var sorted_durations = [ ...durations ].sort((a, b) => a - b);
-        var num90percent = durations.length * 9 / 10;
-        var num99percent = durations.length * 99 / 100;
 
         var data = new google.visualization.DataTable();
         data.addColumn('string', 'range');
@@ -240,19 +263,9 @@ found in the LICENSE file. -->
 
         for (var index in sorted_durations) {
           var dur = sorted_durations[index] / 1000.0;
-          var name;
-          var color;
-          if (dur < cutoff90) {
-            name = 'Typical';
-            color = 'green';
-          } else if (dur < cutoff99) {
-            name = '90th percentile';
-            color = 'yellow';
-          } else {
-            name = '99th percentile';
-            color = 'red';
-          }
-          data.addRow([ name, dur, color ]);
+          var label = label_for(dur, cutoff90, cutoff99);
+          var color = color_for(dur, cutoff90, cutoff99);
+          data.addRow([ label, dur, color ]);
         }
 
         var options = {

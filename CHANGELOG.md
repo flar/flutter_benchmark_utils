@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.4] - 2020/06/02
+
+* added color scale to timeline graphs
+
 ## [0.0.3] - 2020/06/02
 
 * added sorted duration charts to graphTimeline

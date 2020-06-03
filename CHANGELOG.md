@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.5] - 2020/06/03
+
+* indicate periods of no activity in the timeline graphs
+
 ## [0.0.4] - 2020/06/02
 
 * added color scale to timeline graphs

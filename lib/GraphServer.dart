@@ -81,7 +81,7 @@ class _StringRequestHandler extends _RequestHandler {
 class _ResultsRequestHandler extends _StringRequestHandler {
   _ResultsRequestHandler(String variableName, [ GraphResult results = null ])
       : super(kContentTypeJs,
-              'results_filename = "${results.filename}";\n'
+              'results_filename = "${results?.filename}";\n'
               '$variableName = ${results == null ? null : results.json};');
 }
 
@@ -154,7 +154,7 @@ class GraphServer {
         if (graphServer.results == null) {
           print('Graphing page at ${graphServer.serverUrl}');
         } else {
-          print('Graphing results from ${graphServer.results.filename} on ${graphServer.serverUrl}');
+          print('Graphing ${graphServer.results.filename} on ${graphServer.serverUrl}');
         }
       } else {
         print('[mainToIsolateStream] $data');

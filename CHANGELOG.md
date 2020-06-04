@@ -1,6 +1,6 @@
 ## [Unreleased versions]
 
-## [0.0.8] - 2020/06/03
+## [0.0.8] - 2020/06/04
 
 * support for multiple filenames on command line
 * base filename annotations on graph titles and saved PNG filenames

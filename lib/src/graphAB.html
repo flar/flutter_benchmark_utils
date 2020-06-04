@@ -27,8 +27,31 @@ found in the LICENSE file. -->
         }
       }
 
+      var kBenchmarkTypeName = 'benchmark_type';
+      var kBenchmarkTypeValue = 'A/B summaries';
+      var kBenchmarkVersionName = 'version';
+      var kBenchmarkVersionValue = '1.0';
       var kLocalResultsName = 'local_engine_results';
       var kDefaultResultsName = 'default_results';
+
+      function validateJson(json_map, filename) {
+        if (json_map[kBenchmarkTypeName] == kBenchmarkTypeValue &&
+            json_map[kBenchmarkVersionName] == kBenchmarkVersionValue &&
+            json_map[kLocalResultsName] && json_map[kDefaultResultsName]) {
+          return true;
+        }
+        alert(filename + ' is not a Flutter AB results file.');
+        return false;
+      }
+
+      function replaceResults(results, filename) {
+        if (validateJson(results, filename)) {
+          results_filename = filename;
+          graphAB_data = results;
+          clearCharts();
+          makeCharts(results);
+        }
+      }
 
       function combinedKeys(resultsA, resultsB) {
         var combinedKeys = Object.keys(resultsA);
@@ -47,22 +70,6 @@ found in the LICENSE file. -->
       // All charts created
       //   charts_by_type[type] = { chart, data, options, element };
       var charts_by_type = [];
-
-      // Callback that creates and populates a data table,
-      // instantiates the pie chart, passes in the data and
-      // draws it.
-      function loadJSON() {
-        var input = document.getElementById('file-input');
-        if (input.files.length > 0) {
-          var fileReader = new FileReader();
-          fileReader.onload = function(e) {
-            var data = jQuery.parseJSON(fileReader.result);
-            graphAB_data = data;
-            drawCharts();
-          };
-          fileReader.readAsText(input.files[0]);
-        }
-      }
 
       function clearCharts() {
         charts_by_type = [];
@@ -87,7 +94,8 @@ found in the LICENSE file. -->
 
       function saveClick(type) {
         var info = charts_by_type[type];
-        saveAsPNG(info.element, info.options.width, info.options.height, 'AB_'+type+'.png');
+        var filename = 'AB_' + sourceBaseName() + '_' + type + '.png';
+        saveAsPNG(info.element, info.options.width, info.options.height, filename);
       }
 
       function makeChartFromType(type, localResults, defaultResults) {
@@ -126,7 +134,7 @@ found in the LICENSE file. -->
         }
 
         var options = {
-          title: resultsType,
+          title: sourceBaseName()+'\n'+resultsType,
           legend: {
             position: 'none',
           },

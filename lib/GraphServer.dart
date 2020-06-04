@@ -79,24 +79,29 @@ class _StringRequestHandler extends _RequestHandler {
 }
 
 class _ResultsRequestHandler extends _StringRequestHandler {
-  _ResultsRequestHandler(String variableName, [ List<GraphResult> results = const <GraphResult>[] ])
-      : super(kContentTypeJs, '$variableName = ${results.length == 0 ? null : results[0].json};');
+  _ResultsRequestHandler(String variableName, [ GraphResult results = null ])
+      : super(kContentTypeJs,
+              'results_filename = "${results.filename}";\n'
+              '$variableName = ${results == null ? null : results.json};');
 }
 
 class GraphServer {
+  static int _nextWebPort = 4040;
+  static int get nextWebPort => _nextWebPort++;
+
   GraphServer(
       {
         this.graphHtmlName,
         this.resultsScriptName,
         this.resultsVariableName,
         this.results,
-        this.webPort = 4040,
+        int webPort = null,
       })
-      : assert(graphHtmlName != null),
+      : this.webPort = webPort ?? nextWebPort,
+        assert(graphHtmlName != null),
         assert(resultsScriptName != null),
         assert(resultsVariableName != null),
-        assert(results != null),
-        assert(webPort != null)
+        assert(results != null)
   {
     _responseMap = <String, _RequestHandler> {
       '/': _DefaultRequestHandler(kPackagePrefix, graphHtmlName),
@@ -111,7 +116,7 @@ class GraphServer {
   final String graphHtmlName;
   final String resultsScriptName;
   final String resultsVariableName;
-  final List<GraphResult> results;
+  final GraphResult results;
   final int webPort;
 
   String get serverUrl => 'http://localhost:$webPort';
@@ -146,10 +151,10 @@ class GraphServer {
       if (data is GraphServer) {
         GraphServer graphServer = data;
         graphServer.runWebServer();
-        if (graphServer.results.length == 0) {
+        if (graphServer.results == null) {
           print('Graphing page at ${graphServer.serverUrl}');
         } else {
-          print('Graphing results from ${graphServer.results[0].filename} on ${graphServer.serverUrl}');
+          print('Graphing results from ${graphServer.results.filename} on ${graphServer.serverUrl}');
         }
       } else {
         print('[mainToIsolateStream] $data');

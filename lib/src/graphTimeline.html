@@ -21,6 +21,7 @@ found in the LICENSE file. -->
       google.charts.setOnLoadCallback(drawCharts);
 
       function drawCharts() {
+        additional_json_suffix = '.timeline_summary';
         if (graphTimeline_data) {
           clearCharts();
           makeCharts(graphTimeline_data);
@@ -32,6 +33,23 @@ found in the LICENSE file. -->
       var kRenderBeginName = 'frame_rasterizer_begin_times';
       var kRenderDurationName = 'frame_rasterizer_times';
 
+      function validateJson(json_map, filename) {
+        if (json_map[kBuildDurationName] && json_map[kRenderDurationName]) {
+          return true;
+        }
+        alert(filename + ' is not a Flutter timeline_summary file.');
+        return false;
+      }
+
+      function replaceResults(results, filename) {
+        if (validateJson(results, filename)) {
+          results_filename = filename;
+          graphTimeline_data = results;
+          clearCharts();
+          makeCharts(results);
+        }
+      }
+
       function percentile(type, percent) {
         return graphTimeline_data[percent + 'th_percentile_frame_' + type + '_time_millis'];
       }
@@ -39,22 +57,6 @@ found in the LICENSE file. -->
       // All charts created
       //   charts_by_type[type] = { chart, data, options, element };
       var charts_by_type = [];
-
-      // Callback that creates and populates a data table,
-      // instantiates the pie chart, passes in the data and
-      // draws it.
-      function loadJSON() {
-        var input = document.getElementById('file-input');
-        if (input.files.length > 0) {
-          var fileReader = new FileReader();
-          fileReader.onload = function(e) {
-            var data = jQuery.parseJSON(fileReader.result);
-            graphTimeline_data = data;
-            drawCharts();
-          };
-          fileReader.readAsText(input.files[0]);
-        }
-      }
 
       function clearCharts() {
         charts_by_type = [];
@@ -82,7 +84,8 @@ found in the LICENSE file. -->
 
       function saveClick(id) {
         var info = charts_by_type[id];
-        saveAsPNG(info.element, info.options.width, info.options.height, 'TL_'+id+'.png');
+        var filename = 'TL_' + sourceBaseName() + '_' + id + '.png';
+        saveAsPNG(info.element, info.options.width, info.options.height, filename);
       }
 
       function makeTimeChart(begin_times, durations, type) {
@@ -188,7 +191,7 @@ found in the LICENSE file. -->
         }
 
         var options = {
-          title: type,
+          title: sourceBaseName()+':'+type,
           legend: {
             position: 'none',
           },
@@ -247,7 +250,7 @@ found in the LICENSE file. -->
         }
 
         var options = {
-          title: type,
+          title: sourceBaseName()+':'+type,
           legend: {
             position: 'none',
           },

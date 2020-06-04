@@ -1,5 +1,10 @@
 ## [Unreleased versions]
 
+## [0.0.8] - 2020/06/03
+
+* support for multiple filenames on command line
+* base filename annotations on graph titles and saved PNG filenames
+
 ## [0.0.7] - 2020/06/03
 
 * saved PNG files now have proper DPI set

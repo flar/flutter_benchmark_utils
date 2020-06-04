@@ -102,29 +102,23 @@ abstract class GraphCommand {
       return;
     }
 
-    if (args.rest.length > 1) {
-      _usage('Only one result JSON file supported.');
-      return;
-    }
-
-    List<GraphResult> results = [];
     for (String arg in args.rest) {
       String json = _validateJsonFile(arg);
       if (json == null) {
         return;
       }
-      results.add(GraphResult(arg, json));
-    }
+      GraphResult results = GraphResult(arg, json);
 
-    GraphServer server = GraphServer(
-      graphHtmlName: '/$commandName.html',
-      resultsScriptName: '/$commandName-results.js',
-      resultsVariableName: '${commandName}_data',
-      results: results,
-    );
-    await server.initWebServer();
-    if (args[kLaunchOpt] as bool) {
-      await openUrl(server.serverUrl);
+      GraphServer server = GraphServer(
+        graphHtmlName: '/$commandName.html',
+        resultsScriptName: '/$commandName-results.js',
+        resultsVariableName: '${commandName}_data',
+        results: results,
+      );
+      await server.initWebServer();
+      if (args[kLaunchOpt] as bool) {
+        await openUrl(server.serverUrl);
+      }
     }
 
     stdin.lineMode = false;

@@ -7,6 +7,10 @@ found in the LICENSE file. -->
     <!--Load the AJAX API-->
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="base64-data-converter.js"></script>
+    <script src="crc-png.js"></script>
+    <script src="png-utils.js"></script>
+    <script src="html-utils.js"></script>
     <script src="graphTimeline-results.js"></script>
     <script type="text/javascript">
 
@@ -32,28 +36,6 @@ found in the LICENSE file. -->
         return graphTimeline_data[percent + 'th_percentile_frame_' + type + '_time_millis'];
       }
 
-      function combinedKeys(resultsA, resultsB) {
-        var combinedKeys = Object.keys(resultsA);
-        var insertIndex = 0;
-        Object.keys(resultsB).forEach((key) => {
-          var index = combinedKeys.indexOf(key);
-          if (index < 0) {
-            combinedKeys.splice(insertIndex++, 0, key);
-          } else {
-            insertIndex = index+1;
-          }
-        });
-        return combinedKeys;
-      }
-
-      function mergeKeysInto(combinedKeys, runResults) {
-        Object.keys(runResults).forEach((key, value) => {
-          if (combinedKeys.indexOf(key) < 0) {
-            combinedKeys.push(key);
-          }
-        });
-      }
-
       // All charts created
       //   charts_by_type[type] = { chart, data, options, element };
       var charts_by_type = [];
@@ -67,7 +49,7 @@ found in the LICENSE file. -->
           var fileReader = new FileReader();
           fileReader.onload = function(e) {
             var data = jQuery.parseJSON(fileReader.result);
-            AB_data = data;
+            graphTimeline_data = data;
             drawCharts();
           };
           fileReader.readAsText(input.files[0]);
@@ -82,7 +64,7 @@ found in the LICENSE file. -->
         }
       }
 
-      function makeCharts(AB_data) {
+      function makeCharts(graphTimeline_data) {
         var build_begin_times = graphTimeline_data[kBuildBeginName];
         var build_durations = graphTimeline_data[kBuildDurationName];
         var render_begin_times = graphTimeline_data[kRenderBeginName];
@@ -98,53 +80,9 @@ found in the LICENSE file. -->
         }
       }
 
-      function svg2img(element) {
-        var svg = element.getElementsByTagName('svg')[0];
-        var xml = new XMLSerializer().serializeToString(svg);
-        var svg64 = btoa(unescape(encodeURIComponent(xml)));
-        var b64start = 'data:image/svg+xml;base64,';
-        var image64 = b64start + svg64;
-        return image64;
-      }
-
-      function clicked(type) {
-        var info = charts_by_type[type];
-        var canvas = document.createElement('canvas');
-        var dpr = window.devicePixelRatio;
-        canvas.width = info.options.width * dpr;
-        canvas.height = info.options.height * dpr;
-        canvas.style.width = info.options.width;
-        canvas.style.height = info.options.height;
-        canvas.style.display = 'none';
-        var context = canvas.getContext('2d');
-        var img_element = document.createElement('img');
-        img_element.onload = function() {
-          context.scale(dpr, dpr);
-          context.drawImage(img_element, 0, 0);
-          var img_data = canvas.toDataURL('image/png');
-          var link = document.createElement('a');
-          link.href = img_data;
-          link.download = 'TL_'+type+'.png';
-          link.click();
-        }
-        img_element.src = svg2img(info.element);
-      }
-
-      function makeDiv(id, style) {
-        var div = document.createElement('div');
-        div.id = id;
-        div.style = style;
-        for (var i = 2; i < arguments.length; i++) {
-          div.appendChild(arguments[i]);
-        }
-        return div;
-      }
-
-      function makeButton(text, onclick) {
-        var button = document.createElement('button');
-        button.innerHTML = text;
-        button.onclick = onclick;
-        return button;
+      function saveClick(id) {
+        var info = charts_by_type[id];
+        saveAsPNG(info.element, info.options.width, info.options.height, 'TL_'+id+'.png');
       }
 
       function makeTimeChart(begin_times, durations, type) {
@@ -158,7 +96,7 @@ found in the LICENSE file. -->
           makeDiv(
             'controls_' + id,
             'padding-top: 10px;',
-            makeButton('Save as PNG', function() { clicked(id); }),
+            makeButton('Save as PNG', function() { saveClick(id); }),
           ),
         );
       }
@@ -174,7 +112,7 @@ found in the LICENSE file. -->
           makeDiv(
             'controls_' + id,
             'padding-top: 10px;',
-            makeButton('Save as PNG', function() { clicked(id); }),
+            makeButton('Save as PNG', function() { saveClick(id); }),
           ),
         );
       }

@@ -8,7 +8,13 @@ import 'dart:isolate';
 
 import 'package:resource/resource.dart' show Resource;
 
-const String kABPackagePrefix = 'package:flutter_benchmark_utils/src/graphAB';
+const kPackagePrefix = 'package:flutter_benchmark_utils/src/';
+const kStandardScripts = [
+  '/crc-png.js',
+  '/base64-data-converter.js',
+  '/png-utils.js',
+  '/html-utils.js',
+];
 
 final ContentType kContentTypeJs = ContentType('application', 'javascript');
 
@@ -45,9 +51,15 @@ class _FileRequestHandler extends _RequestHandler {
 
   final String packagePrefix;
 
+  ContentType _typeFor(String uri) {
+    if (uri.endsWith('.html')) return ContentType.html;
+    if (uri.endsWith('.js')) return kContentTypeJs;
+    return ContentType.binary;
+  }
+
   Future handle(HttpResponse response, String uri) async {
     Resource fileResource = Resource('$packagePrefix$uri');
-    response.headers.contentType = ContentType.html;
+    response.headers.contentType = _typeFor(uri);
     response.write(await fileResource.readAsString());
     await response.close();
   }
@@ -77,29 +89,28 @@ class GraphServer {
         this.graphHtmlName,
         this.resultsScriptName,
         this.resultsVariableName,
-        this.packagePrefix,
         this.results,
         this.webPort = 4040,
       })
       : assert(graphHtmlName != null),
         assert(resultsScriptName != null),
         assert(resultsVariableName != null),
-        assert(packagePrefix != null),
         assert(results != null),
         assert(webPort != null)
   {
     _responseMap = <String, _RequestHandler> {
-      '/': _DefaultRequestHandler(packagePrefix, graphHtmlName),
+      '/': _DefaultRequestHandler(kPackagePrefix, graphHtmlName),
       '/favicon.ico': _IgnoreRequestHandler(),
-      graphHtmlName: _FileRequestHandler(packagePrefix),
+      graphHtmlName: _FileRequestHandler(kPackagePrefix),
       resultsScriptName: _ResultsRequestHandler(resultsVariableName, results),
+      for (var script in kStandardScripts)
+        script: _FileRequestHandler(kPackagePrefix),
     };
   }
 
   final String graphHtmlName;
   final String resultsScriptName;
   final String resultsVariableName;
-  final String packagePrefix;
   final List<GraphResult> results;
   final int webPort;
 

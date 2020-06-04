@@ -103,7 +103,7 @@ abstract class GraphCommand {
     }
 
     if (args.rest.length > 1) {
-      _usage('Only one ABresult JSON file supported.');
+      _usage('Only one result JSON file supported.');
       return;
     }
 
@@ -119,7 +119,6 @@ abstract class GraphCommand {
     GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
-      packagePrefix: 'package:flutter_benchmark_utils/src/$commandName',
       resultsVariableName: '${commandName}_data',
       results: results,
     );

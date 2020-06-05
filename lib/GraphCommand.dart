@@ -102,15 +102,16 @@ abstract class GraphCommand {
       return;
     }
 
+    List<GraphServer> servers = [];
     if (args.rest.length == 0) {
-      await launch(null, args[kLaunchOpt] as bool);
+      servers.add(await launch(null, args[kLaunchOpt] as bool));
     } else {
       for (String arg in args.rest) {
         String json = _validateJsonFile(arg);
         if (json == null) {
           return;
         }
-        await launch(GraphResult(arg, json), args[kLaunchOpt] as bool);
+        servers.add(await launch(GraphResult(arg, json), args[kLaunchOpt] as bool));
       }
     }
 
@@ -120,12 +121,16 @@ abstract class GraphCommand {
     while ((char = stdin.readByteSync()) != -1) {
       if (char == 'q'.codeUnitAt(0)) {
         break;
+      } else if (char == 'l'.codeUnitAt(0)) {
+        for (var server in servers) {
+          await(openUrl(server.serverUrl));
+        }
       }
     }
     exit(0);
   }
 
-  launch(GraphResult results, bool launchBrowser) async {
+  Future<GraphServer> launch(GraphResult results, bool launchBrowser) async {
     GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
@@ -136,6 +141,7 @@ abstract class GraphCommand {
     if (launchBrowser) {
       await openUrl(server.serverUrl);
     }
+    return server;
   }
 }
 

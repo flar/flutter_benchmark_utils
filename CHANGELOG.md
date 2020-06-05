@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.10] - 2020/06/04
+
+* typing 'l' to the command now (re)launches the URLs in the system default browser.
+
 ## [0.0.9] - 2020/06/04
 
 * support for copying PNG to clipboard

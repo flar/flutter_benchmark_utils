@@ -98,6 +98,11 @@ found in the LICENSE file. -->
         saveAsPNG(info.element, info.options.width, info.options.height, filename);
       }
 
+      function copyClick(id) {
+        var info = charts_by_type[id];
+        copyAsPNG(info.element, info.options.width, info.options.height);
+      }
+
       function makeChartFromType(type, localResults, defaultResults) {
         var localTimes = localResults[type];
         var defaultTimes = defaultResults[type];
@@ -110,6 +115,7 @@ found in the LICENSE file. -->
               'controls_' + type,
               'padding-top: 10px;',
               makeButton('Save as PNG', function() { saveClick(type); }),
+              makeButton('Copy PNG', function() { copyClick(type); }),
             ),
           );
         }

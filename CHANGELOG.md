@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.9] - 2020/06/04
+
+* support for copying PNG to clipboard
+
 ## [0.0.8] - 2020/06/04
 
 * support for multiple filenames on command line

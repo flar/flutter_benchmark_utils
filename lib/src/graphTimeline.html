@@ -15,7 +15,7 @@ found in the LICENSE file. -->
     <script type="text/javascript">
 
       // Load the Visualization API and the Material chart package.
-      google.charts.load('current', {'packages':['corechart']});
+      google.charts.load('current', {'packages':['corechart', 'timeline']});
 
       // Set a callback to run when the Google Visualization API is loaded.
       google.charts.setOnLoadCallback(drawCharts);
@@ -72,10 +72,12 @@ found in the LICENSE file. -->
         var render_begin_times = graphTimeline_data[kRenderBeginName];
         var render_durations = graphTimeline_data[kRenderDurationName];
         var grid = document.getElementById('all_charts_flow');
-        grid.appendChild(makeTimeChart(render_begin_times, render_durations, 'rasterizer'));
-        grid.appendChild(makeTimeChart(build_begin_times, build_durations, 'build'));
-        grid.appendChild(makeDurationChart(render_durations, 'rasterizer'));
-        grid.appendChild(makeDurationChart(build_durations, 'build'));
+        grid.appendChild(makeThreadingElement(build_begin_times, build_durations,
+                                              render_begin_times, render_durations));
+        grid.appendChild(makeTimeElement(build_begin_times, build_durations, 'build'));
+        grid.appendChild(makeTimeElement(render_begin_times, render_durations, 'rasterizer'));
+        grid.appendChild(makeDurationElement(build_durations, 'build'));
+        grid.appendChild(makeDurationElement(render_durations, 'rasterizer'));
         for (var chart_key in charts_by_type) {
           var info = charts_by_type[chart_key];
           info.chart.draw(info.data, info.options);
@@ -93,8 +95,30 @@ found in the LICENSE file. -->
         copyAsPNG(info.element, info.options.width, info.options.height);
       }
 
-      function makeTimeChart(begin_times, durations, type) {
-        var id = 'timeline_' + type;
+      function makeThreadingElement(build_begins, build_durations,
+                                    render_begins, render_durations)
+      {
+        var id = 'thread_timeline';
+        var build90 = percentile('build', 90);
+        var build99 = percentile('build', 99);
+        var render90 = percentile('rasterizer', 90);
+        var render99 = percentile('rasterizer', 99);
+        return makeDiv(
+          id,
+          'padding-top: 5px; border-color: #black;',
+          makeThreadingChart(build_begins, build_durations, build90, build99,
+                             render_begins, render_durations, render90, render99, id),
+          makeDiv(
+            'controls_' + id,
+            null,
+<!--            makeButton('Save as PNG', function() { saveClick(id); }),-->
+<!--            makeButton('Copy PNG', function() { copyClick(id); }),-->
+          ),
+        );
+      }
+
+      function makeTimeElement(begin_times, durations, type) {
+        var id = type + '_timeline';
         var cutoff90 = percentile(type, 90);
         var cutoff99 = percentile(type, 99);
         return makeDiv(
@@ -110,8 +134,8 @@ found in the LICENSE file. -->
         );
       }
 
-      function makeDurationChart(durations, type) {
-        var id = 'duration_' + type;
+      function makeDurationElement(durations, type) {
+        var id = type + '_durations';
         var cutoff90 = percentile(type, 90);
         var cutoff99 = percentile(type, 99);
         return makeDiv(
@@ -137,6 +161,50 @@ found in the LICENSE file. -->
         if (dur < cutoff90) return 'Nominal';
         if (dur < cutoff99) return '90th percentile';
         return '99th percentile';
+      }
+
+      function addThreadRows(data, begins, durations, cutoff90, cutoff99, name, prefix) {
+        for (var i = 0; i < begins.length; i++) {
+          var begin = begins[i] / 1000.0;
+          var dur = durations[i] / 1000.0;
+          var end = begin + dur;
+          var row_label = name;
+          var bar_label = prefix + ' ' + (i+1);
+          var color = color_for(dur, cutoff90, cutoff99);
+          data.addRow([ row_label, bar_label, color, begin, end ]);
+        }
+      }
+
+      function makeThreadingChart(build_begins, build_durations, build90, build99,
+                                  render_begins, render_durations, render90, render99, id)
+      {
+        var data = new google.visualization.DataTable();
+        data.addColumn('string', 'thread');
+        data.addColumn('string', 'frame number');
+        data.addColumn({ type: 'string', role: 'style' });
+        data.addColumn('number', 'build start time');
+        data.addColumn('number', 'build end time');
+
+        addThreadRows(data, build_begins, build_durations, build90, build99, 'Frame Build', 'Frame ');
+        addThreadRows(data, render_begins, render_durations, render90, render99, 'Frame Render', 'Frame ');
+
+        var options = {
+          title: sourceBaseName()+':timeline',
+          avoidOverlappingGridLines: false,
+          colorByRowLabel: true,
+          width: 1200,
+          height: 140,
+        };
+
+        var chart_div = makeDiv('chart_'+id, null);
+        var chart = new google.visualization.Timeline(chart_div);
+        charts_by_type[id] = {
+          chart: chart,
+          data: data,
+          options: options,
+          element: chart_div
+        };
+        return chart_div;
       }
 
       function makeTimelineChart(begin_times, durations, type, cutoff90, cutoff99) {

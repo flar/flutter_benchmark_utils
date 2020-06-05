@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.11] - 2020/06/04
+
+* display a thread work overview at top of timeline graph page.
+
 ## [0.0.10] - 2020/06/04
 
 * typing 'l' to the command now (re)launches the URLs in the system default browser.

@@ -12,6 +12,7 @@ import 'package:args/args.dart';
 import 'GraphServer.dart';
 
 const String kLaunchOpt = 'launch';
+const String kPortOpt = 'port';
 
 abstract class GraphCommand {
   GraphCommand(this.commandName);
@@ -97,6 +98,7 @@ abstract class GraphCommand {
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
+      GraphServer.nextWebPort = int.parse(args[kPortOpt]);
     } on FormatException catch (error) {
       _usage('${error.message}\n');
       return;
@@ -115,6 +117,10 @@ abstract class GraphCommand {
       }
     }
 
+    print('');
+    print("Type 'q' to quit.");
+    print("Type 'l' to launch URL(s) in system default browser.");
+    print('');
     stdin.lineMode = false;
     stdin.echoMode = false;
     int char;
@@ -151,4 +157,9 @@ final ArgParser _argParser = ArgParser()
     kLaunchOpt,
     defaultsTo: false,
     help: 'Automatically launches the graphing URL in the system default browser.',
+  )
+  ..addOption(
+    kPortOpt,
+    defaultsTo: '4040',
+    help: 'Default port for (first) graph page URL.',
   );

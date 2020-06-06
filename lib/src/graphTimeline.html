@@ -98,7 +98,7 @@ found in the LICENSE file. -->
       function makeThreadingElement(build_begins, build_durations,
                                     render_begins, render_durations)
       {
-        var id = 'thread_timeline';
+        var id = 'thread_heat_map';
         var build90 = percentile('build', 90);
         var build99 = percentile('build', 99);
         var render90 = percentile('rasterizer', 90);
@@ -163,16 +163,28 @@ found in the LICENSE file. -->
         return '99th percentile';
       }
 
-      function addThreadRows(data, begins, durations, cutoff90, cutoff99, name, prefix) {
+      function addThreadRowCutoff(data, begins, durations, low, high, row_label, color, prefix) {
         for (var i = 0; i < begins.length; i++) {
-          var begin = begins[i] / 1000.0;
           var dur = durations[i] / 1000.0;
-          var end = begin + dur;
-          var row_label = name;
-          var bar_label = prefix + ' ' + (i+1);
-          var color = color_for(dur, cutoff90, cutoff99);
-          data.addRow([ row_label, bar_label, color, begin, end ]);
+          if (low == null || dur >= low) {
+            if (high == null || dur < high) {
+              var begin = begins[i] / 1000.0;
+              var end = begin + dur;
+              var bar_label = prefix + ' ' + (i+1);
+              data.addRow([ row_label, bar_label, color, begin, end ]);
+            }
+          }
         }
+      }
+
+      function addThreadRows(data, begins, durations, cutoff90, cutoff99, name, prefix) {
+        // Add various cutoff ranges in 3 passes so that the 99% numbers are visible on top
+        var color = color_for(0, 2, 4);
+        addThreadRowCutoff(data, begins, durations, null, cutoff90, name, color, prefix);
+        color = color_for(3, 2, 4);
+        addThreadRowCutoff(data, begins, durations, cutoff90, cutoff99, name, color, prefix);
+        color = color_for(5, 2, 4);
+        addThreadRowCutoff(data, begins, durations, cutoff99, null, name, color, prefix);
       }
 
       function makeThreadingChart(build_begins, build_durations, build90, build99,
@@ -189,7 +201,7 @@ found in the LICENSE file. -->
         addThreadRows(data, render_begins, render_durations, render90, render99, 'Frame Render', 'Frame ');
 
         var options = {
-          title: sourceBaseName()+':timeline',
+          title: sourceBaseName()+':heatmap',
           avoidOverlappingGridLines: false,
           colorByRowLabel: true,
           width: 1200,

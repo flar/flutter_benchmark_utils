@@ -87,6 +87,7 @@ class _ResultsRequestHandler extends _StringRequestHandler {
 
 class GraphServer {
   static int _nextWebPort = 4040;
+  static set nextWebPort(int port) => _nextWebPort = port;
   static int get nextWebPort => _nextWebPort++;
 
   GraphServer(

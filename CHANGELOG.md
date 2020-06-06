@@ -1,12 +1,18 @@
 ## [Unreleased versions]
 
-## [0.0.11] - 2020/06/04
+## [0.0.12] - 2020/06/06
 
-* display a thread work overview at top of timeline graph page.
+* improve visibility of longer frames in thread heat map
+* add default port option to command line
+* print keyboard commands on startup
+
+## [0.0.11] - 2020/06/05
+
+* display a thread work overview at top of timeline graph page
 
 ## [0.0.10] - 2020/06/04
 
-* typing 'l' to the command now (re)launches the URLs in the system default browser.
+* typing 'l' to the command now (re)launches the URLs in the system default browser
 
 ## [0.0.9] - 2020/06/04
 

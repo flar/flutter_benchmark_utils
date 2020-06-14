@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.20] - 2020/06/13
+
+* new prototype flutter web graphing front end
+
 ## [0.0.12] - 2020/06/06
 
 * improve visibility of longer frames in thread heat map

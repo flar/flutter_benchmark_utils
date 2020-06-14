@@ -1,8 +1,8 @@
 name: flutter_benchmark_utils
 description: Flutter package with scripts to graph and analyze Flutter benchmark output
-version: 0.0.12
+version: 0.0.20
 author: flar
-homepage:
+homepage: http://github.com/flar/flutter_benchmark_utils
 
 executables:
   graphAB:
@@ -10,14 +10,20 @@ executables:
 
 environment:
   sdk: ">=2.7.0 <3.0.0"
+  flutter:
 
 dependencies:
   resource: ^2.1.6
   args: 1.6.0
   open_url: 1.0.1
+  http: 0.12.1
 
-#  flutter:
-#    sdk: flutter
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^0.1.3
 
 #dev_dependencies:
 #  flutter_test:
@@ -27,7 +33,12 @@ dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter.
-#flutter:
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
 
   # To add assets to your package, add an assets section, like this:
   # assets:

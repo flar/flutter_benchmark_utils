@@ -4,7 +4,6 @@
 
 import 'dart:io';
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:resource/resource.dart' show Resource;
 
@@ -86,20 +85,14 @@ class _ResultsRequestHandler extends _StringRequestHandler {
 }
 
 class GraphServer {
-  static int _nextWebPort = 4040;
-  static set nextWebPort(int port) => _nextWebPort = port;
-  static int get nextWebPort => _nextWebPort++;
-
   GraphServer(
       {
         this.graphHtmlName,
         this.resultsScriptName,
         this.resultsVariableName,
         this.results,
-        int webPort,
       })
-      : this.webPort = webPort ?? nextWebPort,
-        assert(graphHtmlName != null),
+      : assert(graphHtmlName != null),
         assert(resultsScriptName != null),
         assert(resultsVariableName != null),
         assert(results != null)
@@ -118,67 +111,33 @@ class GraphServer {
   final String resultsScriptName;
   final String resultsVariableName;
   final GraphResult results;
-  final int webPort;
-
-  String get serverUrl => 'http://localhost:$webPort';
 
   Map<String,_RequestHandler> _responseMap;
   Map<String, _RequestHandler> get responseMap => _responseMap;
 
-  Future<SendPort> initWebServer() async {
-    Completer completer = new Completer<SendPort>();
-    ReceivePort isolateToMainStream = ReceivePort();
-
-    isolateToMainStream.listen((data) {
-      if (data is SendPort) {
-        SendPort mainToIsolateStream = data;
-        completer.complete(mainToIsolateStream);
-        mainToIsolateStream.send(this);
-      } else {
-        print('[isolateToMainStream] $data');
-        exit(-1);
-      }
-    });
-
-    await Isolate.spawn(forkWebServer, isolateToMainStream.sendPort);
-    return completer.future;
-  }
-
-  static void forkWebServer(SendPort isolateToMainStream) async {
-    ReceivePort mainToIsolateStream = ReceivePort();
-    isolateToMainStream.send(mainToIsolateStream.sendPort);
-
-    mainToIsolateStream.listen((data) {
-      if (data is GraphServer) {
-        GraphServer graphServer = data;
-        graphServer.runWebServer();
-        if (graphServer.results == null) {
-          print('Graphing page at ${graphServer.serverUrl}');
-        } else {
-          print('Graphing ${graphServer.results.filename} on ${graphServer.serverUrl}');
-        }
-      } else {
-        print('[mainToIsolateStream] $data');
-        exit(-1);
-      }
-    });
-  }
-
-  void runWebServer() async {
+  Future<String> initWebServer() async {
     var webServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
-      webPort,
+      0,
     );
 
-    await for (HttpRequest request in webServer) {
+    webServer.listen((request) async {
       _RequestHandler handler = responseMap[request.uri.toString()];
       if (handler != null) {
         await handler.handle(request.response, request.uri.toString());
       } else {
         print('request uri: ${request.uri}\n'
-              'request requested uri: ${request.requestedUri}');
+            'request requested uri: ${request.requestedUri}');
         await request.response.close();
       }
+    });
+
+    String serverUrl = 'http://localhost:${webServer.port}';
+    if (results == null) {
+      print('Graphing page at ${serverUrl}');
+    } else {
+      print('Graphing ${results.filename} on ${serverUrl}');
     }
+    return serverUrl;
   }
 }

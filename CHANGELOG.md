@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.21] - 2020/06/15
+
+* move prototype flutter web app to a sub-directory for easier pub global deployment
+
 ## [0.0.20] - 2020/06/13
 
 * new prototype flutter web graphing front end

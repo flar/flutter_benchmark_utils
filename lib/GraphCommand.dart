@@ -12,9 +12,7 @@ import 'package:args/args.dart';
 import 'GraphServer.dart';
 
 const String kLaunchOpt = 'launch';
-const String kPortOpt = 'port';
 const String kWebAppOpt = 'web';
-const String kWebDebugAppOpt = 'web-debug';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {
@@ -101,58 +99,59 @@ abstract class GraphCommand {
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
-      GraphServer.nextWebPort = int.parse(args[kPortOpt]);
     } on FormatException catch (error) {
       _usage('${error.message}\n');
       return;
     }
 
-    bool useWebApp = (args[kWebAppOpt] as bool) || (args[kWebDebugAppOpt] as bool);
+    List<GraphResult> results = [];
+    for (String arg in args.rest) {
+      String json = _validateJsonFile(arg);
+      if (json == null) {
+        return;
+      }
+      results.add(GraphResult(arg, json));
+    }
 
-    List<GraphServer> servers = [];
-    if (args.rest.length == 0) {
-      servers.add(await launch(null, args[kLaunchOpt] as bool));
+    List<String> servedUrls = [];
+    Future<Process> webBuilder;
+    if (args[kWebAppOpt] as bool) {
+      servedUrls.add(await serveToWebApp(results));
+      webBuilder = buildWebApp(
+        verbose: args[kVerboseOpt] as bool,
+      );
     } else {
-      for (String arg in args.rest) {
-        String json = _validateJsonFile(arg);
-        if (json == null) {
-          return;
-        }
-        if (useWebApp) {
-          await serveToWebApp(GraphResult(arg, json));
-        } else {
-          servers.add(await launch(GraphResult(arg, json), args[kLaunchOpt] as bool));
-        }
+      if (results.length == 0) {
+        servedUrls.add(await launchHtml(null));
+      }
+      for (GraphResult result in results) {
+        servedUrls.add(await launchHtml(result));
       }
     }
 
-    Future<Process> webApp = useWebApp
-        ? launchWebApp(verbose: args[kVerboseOpt] as bool, debug: args[kWebDebugAppOpt] as bool)
-        : null;
-
     print('');
-    if (!useWebApp) {
+    if (args[kLaunchOpt] as bool) {
+      if (webBuilder != null) {
+        webBuilder.then((process) => process.exitCode.then((_) => launchAll(servedUrls)));
+      } else {
+        launchAll(servedUrls);
+      }
+    } else {
       print("Type 'l' to launch URL(s) in system default browser.");
     }
     print("Type 'q' to quit.");
     print('');
     stdin.lineMode = false;
     stdin.echoMode = false;
-    stdin.forEach((List<int> chars) {
+    stdin.listen((List<int> chars) async {
       for (int char in chars) {
         if (char == 'q'.codeUnitAt(0)) {
-          if (webApp != null) {
-            webApp.then((process) {
-              process.stdin.writeln('q');
-            });
-            // Return instead of exit to give the web app a chance to shut down gracefully.
-            return;
-          } else {
-            // Exit instead of return because we don't have a good way to notify the servers.
-            exit(0);
+          if (webBuilder != null) {
+            await webBuilder.then((process) => process.kill());
           }
+          exit(0);
         } else if (char == 'l'.codeUnitAt(0)) {
-          launchAll(servers);
+          launchAll(servedUrls);
         }
       }
     });
@@ -164,74 +163,97 @@ abstract class GraphCommand {
     }
   }
 
-  launchAll(List<GraphServer> servers) async {
-    for (var server in servers) {
-      await openUrl(server.serverUrl);
+  launchAll(List<String> servedUrls) async {
+    for (var url in servedUrls) {
+      await openUrl(url);
     }
   }
 
-  Future<GraphServer> launch(GraphResult results, bool launchBrowser) async {
+  Future<String> launchHtml(GraphResult results) async {
     GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
       resultsVariableName: '${commandName}_data',
       results: results,
     );
-    await server.initWebServer();
-    if (launchBrowser) {
-      await openUrl(server.serverUrl);
-    }
-    return server;
+    return await server.initWebServer();
   }
 
-  Future<Process> launchWebApp({bool verbose, bool debug}) {
-    String repoPath = new File(Platform.script.path).parent.parent.path;
-    List<String> args = [ 'run', debug ? '--debug' : '--release', '-d', 'chrome' ];
-    return Process.start('flutter', args, workingDirectory: repoPath).then((Process process) {
+  String get webappPath {
+    Directory repo = new File(Platform.script.path).parent.parent;
+    Directory webapp_repo = Directory('${repo.path}/packages/graph_app');
+    return webapp_repo.path;
+  }
+
+  Future<Process> buildWebApp({bool verbose}) {
+    List<String> args = [ 'build', 'web' ];
+    return Process.start('flutter', args, workingDirectory: webappPath).then((Process process) {
       if (verbose) {
         process.stdout.transform(utf8.decoder).listen((chunk) => webOut('stdout', chunk));
       }
       process.stderr.transform(utf8.decoder).listen((chunk) => webOut('stderr', chunk));
-      process.exitCode.then((value) => exit(value));
+      process.exitCode.then((value) { if (value != 0) { exit(value); } } );
       return process;
     });
   }
 
-  Future<HttpServer> _server;
-  Map<String,GraphResult> _results = <String,GraphResult>{};
+  static final ContentType jsType = ContentType('text', 'javascript');
+  static final ContentType ttfType = ContentType('font', 'ttf');
 
-  Future<void> serveToWebApp(GraphResult result) async {
-    if (_results.isEmpty) {
-      _server = HttpServer.bind(InternetAddress.loopbackIPv4, 4090);
-      _server.then((HttpServer server) async {
-        server.listen((HttpRequest request) {
-          String uri = request.uri.toString();
-          if (uri == '/list') {
-            List<String> filenames = [ ..._results.keys ];
-            request.response.headers.contentType = ContentType.json;
-            request.response.headers.set('access-control-allow-origin', '*');
-            request.response.write(JsonEncoder.withIndent('  ').convert(filenames));
-            request.response.close();
-          } else if (uri.startsWith('/result?')) {
-            String key = uri.substring(8);
-            request.response.headers.contentType = ContentType.json;
-            request.response.headers.set('access-control-allow-origin', '*');
-            request.response.write(_results[key].json);
-            request.response.close();
-          }
-        });
-      });
-    }
-    if (_results.containsKey(result.filename)) {
-      if (_results[result.filename].json == result.json) {
-        stderr.writeln('Ignoring duplicate results added for ${result.filename}');
-      } else {
-        stderr.writeln('Conflicting results added for ${result.filename}');
-        exit(-1);
-      }
+  ContentType typeFor(String uri) {
+    if (uri.endsWith('.html')) {
+      return ContentType.html;
+    } else if (uri.endsWith('.js')) {
+      return jsType;
+    } else if (uri.endsWith('.ttf')) {
+      return ttfType;
     } else {
-      _results[result.filename] = result;
+      return ContentType.binary;
     }
+  }
+
+  Future<String> serveToWebApp(List<GraphResult> results) async {
+    Map<String,GraphResult> resultMap = {};
+    for (GraphResult result in results) {
+      if (resultMap.containsKey(result.filename)) {
+        if (resultMap[result.filename].json == result.json) {
+          stderr.writeln('Ignoring duplicate results added for ${result.filename}');
+        } else {
+          stderr.writeln('Conflicting results added for ${result.filename}');
+          exit(-1);
+        }
+      } else {
+        resultMap[result.filename] = result;
+      }
+    }
+    HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((HttpRequest request) {
+      request.response.headers.set('access-control-allow-origin', '*');
+      String uri = request.uri.toString();
+      if (uri == '/list') {
+        List<String> filenames = [ ...resultMap.keys ];
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(JsonEncoder.withIndent('  ').convert(filenames));
+        request.response.close();
+      } else if (uri.startsWith('/result?')) {
+        String key = uri.substring(8);
+        if (resultMap.containsKey(key)) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(resultMap[key].json);
+          request.response.close();
+        }
+      } else {
+        if (uri == '/') uri = '/index.html';
+        File f = File('$webappPath/build/web$uri');
+        if (f.existsSync()) {
+          request.response.headers.contentType = typeFor(uri);
+          request.response.addStream(f.openRead()).then((_) => request.response.close());
+        }
+      }
+    });
+    String url = 'http://localhost:${server.port}';
+    print('Serving graphing web app on $url');
+    return url;
   }
 }
 
@@ -248,18 +270,8 @@ final ArgParser _argParser = ArgParser()
     help: 'Use a Dart Web App to graph the results.',
   )
   ..addFlag(
-    kWebDebugAppOpt,
-    defaultsTo: false,
-    help: 'Use a (debug) Dart Web App to graph the results.',
-  )
-  ..addFlag(
     kVerboseOpt,
     abbr: 'v',
     defaultsTo: false,
     help: 'Verbose output.',
-  )
-  ..addOption(
-    kPortOpt,
-    defaultsTo: '4040',
-    help: 'Default port for (first) graph page URL.',
   );

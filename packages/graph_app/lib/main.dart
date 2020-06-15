@@ -9,19 +9,6 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
 
-const int kGraphAppWebPort = 4090;
-
-const List<String> kResultKeys = [
-  'average_frame_build_time_millis',
-  '90th_percentile_frame_build_time_millis',
-  '99th_percentile_frame_build_time_millis',
-  'worst_frame_build_time_millis',
-  'average_frame_rasterizer_time_millis',
-  '90th_percentile_frame_rasterizer_time_millis',
-  '99th_percentile_frame_rasterizer_time_millis',
-  'worst_frame_rasterizer_time_millis',
-];
-
 final List<Color> heatColors = [
   Colors.green,
   Colors.green.shade200,
@@ -156,7 +143,7 @@ class _GraphApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Timeline Graphing App',
+      title: 'Flutter Timeline Graphing Web App',
       home: _TimelineGraphPage(),
     );
   }
@@ -206,7 +193,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> {
   }
 
   void getList() {
-    performGet('http://localhost:4090/list', (http.Response response) {
+    performGet('/list', (http.Response response) {
       if (response.statusCode == 200) {
         dynamic json = JsonDecoder().convert(response.body);
         for (String key in json) {
@@ -225,7 +212,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> {
 
   void getResults(String key) {
     setMessage('Loading results from $key...', key);
-    performGet('http://localhost:4090/result?$key', (http.Response response) {
+    performGet('/result?$key', (http.Response response) {
       if (response.statusCode == 200) {
         try {
           setResults(key, TimelineResults.fromJson(JsonDecoder().convert(response.body)));

@@ -180,8 +180,11 @@ abstract class GraphCommand {
   }
 
   String get webappPath {
+    print('script is at ${Platform.script.path}');
     Directory repo = new File(Platform.script.path).parent.parent;
+    print('repo is at ${repo.path}');
     Directory webapp_repo = Directory('${repo.path}/packages/graph_app');
+    print('webapp repo is at ${webapp_repo.path}');
     return webapp_repo.path;
   }
 

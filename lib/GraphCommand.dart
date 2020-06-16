@@ -8,17 +8,21 @@ import 'dart:async';
 
 import 'package:open_url/open_url.dart';
 import 'package:args/args.dart';
+import 'package:resource/resource.dart' show Resource;
+import 'package:archive/archive.dart';
 
 import 'GraphServer.dart';
 
 const String kLaunchOpt = 'launch';
 const String kWebAppOpt = 'web';
+const String kWebAppLocalOpt = 'web-local';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {
   GraphCommand(this.commandName);
 
   final String commandName;
+  bool verbose;
 
   String validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
     dynamic val = map[key];
@@ -103,6 +107,7 @@ abstract class GraphCommand {
       _usage('${error.message}\n');
       return;
     }
+    verbose = args[kVerboseOpt] as bool;
 
     List<GraphResult> results = [];
     for (String arg in args.rest) {
@@ -115,11 +120,15 @@ abstract class GraphCommand {
 
     List<String> servedUrls = [];
     Future<Process> webBuilder;
-    if (args[kWebAppOpt] as bool) {
-      servedUrls.add(await serveToWebApp(results));
-      webBuilder = buildWebApp(
-        verbose: args[kVerboseOpt] as bool,
-      );
+    if (args[kWebAppLocalOpt] as bool) {
+      if (args[kWebAppOpt] as bool) {
+        _usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
+        return;
+      }
+      servedUrls.add(await serveToWebApp(results, true));
+      webBuilder = buildWebApp();
+    } else if (args[kWebAppOpt] as bool) {
+      servedUrls.add(await serveToWebApp(results, false));
     } else {
       if (results.length == 0) {
         servedUrls.add(await launchHtml(null));
@@ -179,18 +188,22 @@ abstract class GraphCommand {
     return await server.initWebServer();
   }
 
-  String get webappPath {
-    print('script is at ${Platform.script.path}');
+  String _webAppPath;
+  String get webAppPath => _webAppPath ??= _findWebAppPath();
+  String _findWebAppPath() {
     Directory repo = new File(Platform.script.path).parent.parent;
-    print('repo is at ${repo.path}');
     Directory webapp_repo = Directory('${repo.path}/packages/graph_app');
-    print('webapp repo is at ${webapp_repo.path}');
     return webapp_repo.path;
   }
 
-  Future<Process> buildWebApp({bool verbose}) {
+  Future<Archive> _loadWebAppArchive() async {
+    Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
+    return ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
+  }
+
+  Future<Process> buildWebApp() {
     List<String> args = [ 'build', 'web' ];
-    return Process.start('flutter', args, workingDirectory: webappPath).then((Process process) {
+    return Process.start('flutter', args, workingDirectory: webAppPath).then((Process process) {
       if (verbose) {
         process.stdout.transform(utf8.decoder).listen((chunk) => webOut('stdout', chunk));
       }
@@ -215,7 +228,7 @@ abstract class GraphCommand {
     }
   }
 
-  Future<String> serveToWebApp(List<GraphResult> results) async {
+  Future<String> serveToWebApp(List<GraphResult> results, bool local) async {
     Map<String,GraphResult> resultMap = {};
     for (GraphResult result in results) {
       if (resultMap.containsKey(result.filename)) {
@@ -230,28 +243,59 @@ abstract class GraphCommand {
       }
     }
     HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var handler;
+    if (local) {
+      handler = (HttpResponse response, String uri) {
+        File f = File('$webAppPath/build/web$uri');
+        if (!f.existsSync()) {
+          return false;
+        }
+        response.headers.contentType = typeFor(uri);
+        response.headers.contentLength = f.lengthSync();
+        response.addStream(f.openRead()).then((_) => response.close());
+        return true;
+      };
+    } else {
+      Archive webAppArchive = await _loadWebAppArchive();
+      handler = (HttpResponse response, String uri) {
+        ArchiveFile f = webAppArchive.findFile('webapp$uri');
+        if (f == null) {
+          return false;
+        }
+        response.headers.contentType = typeFor(uri);
+        response.headers.contentLength = f.size;
+        response.add(f.content);
+        response.close();
+        return true;
+      };
+    }
     server.listen((HttpRequest request) {
       request.response.headers.set('access-control-allow-origin', '*');
       String uri = request.uri.toString();
       if (uri == '/list') {
         List<String> filenames = [ ...resultMap.keys ];
+        String filenameJson = JsonEncoder.withIndent('  ').convert(filenames);
         request.response.headers.contentType = ContentType.json;
-        request.response.write(JsonEncoder.withIndent('  ').convert(filenames));
+        request.response.headers.contentLength = filenameJson.length;
+        request.response.write(filenameJson);
         request.response.close();
       } else if (uri.startsWith('/result?')) {
         String key = uri.substring(8);
         if (resultMap.containsKey(key)) {
           request.response.headers.contentType = ContentType.json;
+          request.response.headers.contentLength = resultMap[key].json.length;
           request.response.write(resultMap[key].json);
           request.response.close();
         }
       } else {
         if (uri == '/') uri = '/index.html';
-        File f = File('$webappPath/build/web$uri');
-        if (f.existsSync()) {
-          request.response.headers.contentType = typeFor(uri);
-          request.response.addStream(f.openRead()).then((_) => request.response.close());
+        if (!handler(request.response, uri)) {
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.close();
         }
+      }
+      if (verbose) {
+        print('web app data server served ${request.response.headers.contentLength} bytes: $uri');
       }
     });
     String url = 'http://localhost:${server.port}';
@@ -271,6 +315,12 @@ final ArgParser _argParser = ArgParser()
     kWebAppOpt,
     defaultsTo: false,
     help: 'Use a Dart Web App to graph the results.',
+  )
+  ..addFlag(
+    kWebAppLocalOpt,
+    hide: true,
+    defaultsTo: false,
+    help: 'Runs the web app from the web app package directory for debugging.',
   )
   ..addFlag(
     kVerboseOpt,

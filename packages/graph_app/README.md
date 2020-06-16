@@ -7,3 +7,23 @@ graph the timeline results of Flutter benchmarks.
 
 This project is not normally visible if you open the Flutter Benchmark Tools project,
 you will need to open it independently to contribute to it.
+
+## Developing
+
+While working on the graph_app web app you will want to test it by running it directly
+from the source package rather than installing it each time you change it. You can use
+a hidden command line option for the graphTimeline command `--web-local` that will
+build the web app from this directory and then serve the results directly to the browser
+from the build directory.
+
+## Installing
+
+When work is done on the graph_app, you should install it into the main part of the repo
+so that it can be used by invocations activated using pub global. The `tools/install.sh`
+shell script will verify that the files are built and package them up into a zip file
+installed in the lib/src directory of the main project. This script should be executed
+from the tools directory.
+
+If you have added any dependencies that need to be served alongside the web app, you may
+need to edit the install script as it contains a specific list of files needed to be
+served to the browser at run time.

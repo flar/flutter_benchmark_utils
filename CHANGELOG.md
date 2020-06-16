@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.22] - 2020/06/16
+
+* web app is now served by default from an asset so it works from pub global activations.
+
 ## [0.0.21] - 2020/06/15
 
 * move prototype flutter web app to a sub-directory for easier pub global deployment

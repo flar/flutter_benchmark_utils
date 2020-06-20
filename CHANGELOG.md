@@ -1,5 +1,10 @@
 ## [Unreleased versions]
 
+## [0.0.23] - 2020/06/19
+
+* axes on timeline charts
+* '+/-' zooming and 'wasd' navigation in timeline charts
+
 ## [0.0.22] - 2020/06/16
 
 * web app is now served by default from an asset so it works from pub global activations.

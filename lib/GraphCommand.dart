@@ -16,6 +16,7 @@ import 'GraphServer.dart';
 const String kLaunchOpt = 'launch';
 const String kWebAppOpt = 'web';
 const String kWebAppLocalOpt = 'web-local';
+const String kCanvasKitOpt = 'canvas-kit';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {
@@ -77,7 +78,9 @@ abstract class GraphCommand {
   void _usage(String error) {
     if (error != null) {
       exitCode = 1;
+      stderr.writeln('');
       stderr.writeln(error);
+      stderr.writeln('');
     }
     stderr.writeln('Usage: dart $commandName [options (see below)] [<resultsfilename>]\n');
     stderr.writeln(_argParser.usage);
@@ -126,7 +129,10 @@ abstract class GraphCommand {
         return;
       }
       servedUrls.add(await serveToWebApp(results, true));
-      webBuilder = buildWebApp();
+      webBuilder = buildWebApp(args[kCanvasKitOpt] as bool);
+    } else if (args[kCanvasKitOpt] as bool) {
+      _usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
+      return;
     } else if (args[kWebAppOpt] as bool) {
       servedUrls.add(await serveToWebApp(results, false));
     } else {
@@ -201,8 +207,11 @@ abstract class GraphCommand {
     return ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
   }
 
-  Future<Process> buildWebApp() {
+  Future<Process> buildWebApp(bool useCanvasKit) {
     List<String> args = [ 'build', 'web' ];
+    if (useCanvasKit) {
+      args.add('--dart-define=FLUTTER_WEB_USE_SKIA=true');
+    }
     return Process.start('flutter', args, workingDirectory: webAppPath).then((Process process) {
       if (verbose) {
         process.stdout.transform(utf8.decoder).listen((chunk) => webOut('stdout', chunk));
@@ -321,6 +330,12 @@ final ArgParser _argParser = ArgParser()
     hide: true,
     defaultsTo: false,
     help: 'Runs the web app from the web app package directory for debugging.',
+  )
+  ..addFlag(
+    kCanvasKitOpt,
+    hide: true,
+    defaultsTo: false,
+    help: 'Uses CanvasKit backend for local web.',
   )
   ..addFlag(
     kVerboseOpt,

@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.24] - 2020/07/11
+
+* mouse panning in zoomed timeline charts
+
 ## [0.0.23] - 2020/06/19
 
 * axes on timeline charts

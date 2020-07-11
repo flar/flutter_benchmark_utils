@@ -84,8 +84,7 @@ class TimelineResultsGraphWidget extends StatelessWidget {
 
 abstract class TimelineAxisPainter extends CustomPainter {
   TimelineAxisPainter(this.graphPainter, this.range, this.units, this.horizontal, int maxTicks)
-      : ticks = makeTicks(range, units, maxTicks),
-        _new = true;
+      : ticks = makeTicks(range, units, maxTicks);
 
   static List<TimeVal> makeTicks(TimeFrame range, TimeVal units, int maxTicks) {
     TimeVal adjUnit = _optimalTickUnit(range, units, maxTicks);
@@ -115,8 +114,6 @@ abstract class TimelineAxisPainter extends CustomPainter {
   final TimeVal units;
   final bool horizontal;
   final List<TimeVal> ticks;
-
-  bool _new;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -148,11 +145,10 @@ abstract class TimelineAxisPainter extends CustomPainter {
       }
       textPainter.paint(canvas, Offset(x, y));
     }
-    _new = false;
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => _new;
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
 class TimelineHAxisPainter extends TimelineAxisPainter {
@@ -185,8 +181,7 @@ class TimelineGraphPainter extends CustomPainter {
   static const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
 
   TimelineGraphPainter(this.timeline, [this.zoom = unitRect])
-      : run = timeline.wholeRun,
-        _new = true;
+      : run = timeline.wholeRun;
 
   final TimelineThreadResults timeline;
   final TimeFrame run;
@@ -198,8 +193,6 @@ class TimelineGraphPainter extends CustomPainter {
   TimelineVAxisPainter _durationPainter;
   TimelineVAxisPainter get durationPainter => _durationPainter ??= TimelineVAxisPainter(this);
 
-  bool _new;
-
   double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width  * run.getFraction(t);
   double getY(TimeVal d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
 
@@ -209,8 +202,9 @@ class TimelineGraphPainter extends CustomPainter {
   Rect getRect(TimeFrame f, Rect view) => _getRectBar(f, getY(f.duration, view), view);
   Rect getMaxRect(TimeFrame f, Rect bounds) => _getRectBar(f, 0, bounds);
 
-  void drawLine(Canvas canvas, Size size, Paint paint, double y, int heatIndex) {
-    paint.color = heatColors[heatIndex].withAlpha(128);
+  void drawLine(Canvas canvas, Size size, Paint paint, double y, Color heatColor) {
+    paint.color = heatColor.withAlpha(128);
+    paint.strokeWidth = 1.0;
     double dashLen = 10.0;
     for (double x = 0; x < size.width; x += dashLen + dashLen) {
       canvas.drawLine(Offset(x, y), Offset(x + dashLen, y), paint);
@@ -227,25 +221,23 @@ class TimelineGraphPainter extends CustomPainter {
 
     Paint paint = Paint();
 
-    paint.style = PaintingStyle.fill;
-    TimeFrame prevFrame;
     // Draw gaps first
-    for (TimeFrame frame in timeline) {
-      if (prevFrame != null) {
-        TimeFrame gap = frame - prevFrame;
-        if (gap.duration.millis > 16) {
-          paint.color = Colors.grey.shade200;
-          canvas.drawRect(getMaxRect(gap, view), paint);
-        }
+    paint.style = PaintingStyle.fill;
+    paint.color = Colors.grey.shade200;
+    TimeFrame prevFrame = timeline.first;
+    for (TimeFrame frame in timeline.skip(1)) {
+      TimeFrame gap = frame - prevFrame;
+      if (gap.duration.millis > 16) {
+        canvas.drawRect(getMaxRect(gap, view), paint);
       }
       prevFrame = frame;
     }
 
     // Then lines over gaps
     paint.style = PaintingStyle.stroke;
-    drawLine(canvas, size, paint, getY(timeline.average,   view), 0);
-    drawLine(canvas, size, paint, getY(timeline.percent90, view), 1);
-    drawLine(canvas, size, paint, getY(timeline.percent99, view), 2);
+    drawLine(canvas, size, paint, getY(timeline.average,   view), heatColors[0]);
+    drawLine(canvas, size, paint, getY(timeline.percent90, view), heatColors[1]);
+    drawLine(canvas, size, paint, getY(timeline.percent99, view), heatColors[2]);
 
     // Finally frame times over lines
     paint.style = PaintingStyle.fill;
@@ -253,11 +245,10 @@ class TimelineGraphPainter extends CustomPainter {
       paint.color = heatColors[timeline.heatIndex(frame.duration)];
       canvas.drawRect(getRect(frame, view), paint);
     }
-    _new = false;
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => _new;
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
 class TimelineGraphWidget extends StatefulWidget {
@@ -271,12 +262,16 @@ class TimelineGraphWidget extends StatefulWidget {
 
 class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   TimelineGraphWidgetState(this._timeline)
-      : _painter = TimelineGraphPainter(_timeline),
-        _hoverStr = '';
+      : _mouseKey = GlobalKey(),
+        _imageKey = GlobalKey(),
+        _painter = TimelineGraphPainter(_timeline),
+        _hoverString = '';
 
   final TimelineThreadResults _timeline;
-  final GlobalKey _mouseKey = GlobalKey();
+  final GlobalKey _mouseKey;
+  final GlobalKey _imageKey;
   FocusNode focusNode;
+  Offset _dragAnchor;
 
   @override
   void initState() {
@@ -295,31 +290,35 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   TimelineGraphPainter _painter;
-  Offset pointerPosition;
-  TimeFrame _hoverEvent;
-  String _hoverStr;
+  Offset _zoomAnchor;
+  TimeFrame _hoverFrame;
+  String _hoverString;
 
   void _setHoverEvent(TimeFrame e) {
-    if (_hoverEvent != e) {
+    if (_hoverFrame != e) {
       String start = e.start.stringSeconds();
       String end = e.end.stringSeconds();
       String dur = e.duration.stringMillis();
       String label = _timeline.labelFor(e.duration);
       setState(() {
-        _hoverStr = 'frame[$start => $end] = $dur ($label)';
+        _hoverFrame = e;
+        _hoverString = 'frame[$start => $end] = $dur ($label)';
       });
     }
   }
 
-  Offset _getRelativePosition(Offset position) {
+  Offset _getWidgetRelativePosition(Offset position) {
     RenderBox box = _mouseKey.currentContext.findRenderObject();
     Offset mousePosition = box.globalToLocal(position);
-    Offset boxRelative = Offset(mousePosition.dx / box.size.width, mousePosition.dy / box.size.height);
-    Offset viewRelative = Offset(
-      _painter.zoom.left + boxRelative.dx * _painter.zoom.width,
-      _painter.zoom.top  + boxRelative.dy * _painter.zoom.height,
+    return Offset(mousePosition.dx / box.size.width, mousePosition.dy / box.size.height);
+  }
+
+  Offset _getViewRelativePosition(Offset position) {
+    Offset widgetRelative = _getWidgetRelativePosition(position);
+    return Offset(
+      _painter.zoom.left + widgetRelative.dx * _painter.zoom.width,
+      _painter.zoom.top  + widgetRelative.dy * _painter.zoom.height,
     );
-    return viewRelative;
   }
 
   Rect _scaleRectAround(Rect r, Offset p, Size s) {
@@ -363,9 +362,9 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     return r;
   }
 
-  void _onHover(PointerEvent mouseEvent) {
-    Offset relative = _getRelativePosition(mouseEvent.position);
-    pointerPosition = relative;
+  void _onHover(Offset position) {
+    Offset relative = _getViewRelativePosition(position);
+    _zoomAnchor = relative;
     TimeVal t = _timeline.wholeRun.elapsedTime(relative.dx);
     TimeFrame e = _timeline.eventNear(t);
     _setHoverEvent(e);
@@ -383,10 +382,48 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     setState(() => _painter = TimelineGraphPainter(_timeline, view));
   }
 
+  void _reset() {
+    setState(() => _painter = TimelineGraphPainter(_timeline));
+  }
+
+  void _dragDown(Offset position) {
+    print('drag down at $position');
+    _dragAnchor = _getWidgetRelativePosition(position);
+  }
+
+  void _drag(Offset position) {
+    print('drag move to $position');
+    Offset newAnchor = _getWidgetRelativePosition(position);
+    Offset relative = _dragAnchor - newAnchor;
+    _dragAnchor = newAnchor;
+    _move(relative.dx, relative.dy);
+  }
+
+//  void _capture() async {
+//    RenderRepaintBoundary boundary = _imageKey.currentContext.findRenderObject();
+//    Rect bounds = boundary.paintBounds;
+//    Size size = bounds.size;
+//    ui.PictureRecorder recorder = ui.PictureRecorder();
+//    ui.Canvas canvas = ui.Canvas(recorder, bounds);
+//    _painter.paint(canvas, size);
+//    ui.Picture picture = recorder.endRecording();
+//    ui.Image img = await picture.toImage(size.width.ceil(), size.height.ceil());
+//    ByteData bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+//    final _base64 = base64Encode(Uint8List.sublistView(bytes));
+//    // Create the link with the file
+//    final anchor = AnchorElement(href: 'data:application/octet-stream;base64,$_base64')
+//      ..target = 'blank'
+//      ..download = 'test.png';
+//    // trigger download
+//    document.body.append(anchor);
+//    anchor.click();
+//    anchor.remove();
+//  }
+
   bool _onKey(RawKeyEvent keyEvent) {
     if (keyEvent is RawKeyDownEvent) {
       if (keyEvent.logicalKey.keyLabel == 'r') {
-        setState(() => _painter = TimelineGraphPainter(_timeline));
+        _reset();
       } else if (keyEvent.logicalKey.keyLabel == 'w') {
         _move(0.0, -0.1);
       } else if (keyEvent.logicalKey.keyLabel == 'a') {
@@ -396,9 +433,11 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       } else if (keyEvent.logicalKey.keyLabel == 'd') {
         _move(0.1, 0.0);
       } else if (keyEvent.logicalKey.keyLabel == '=') {
-        _zoom(pointerPosition, 0.8);
+        _zoom(_zoomAnchor, 0.8);
       } else if (keyEvent.logicalKey.keyLabel == '-') {
-        _zoom(pointerPosition, 1/0.8);
+        _zoom(_zoomAnchor, 1/0.8);
+//      } else if (keyEvent.logicalKey.keyLabel == 'c') {
+//        _capture();
       } else {
         print('unrecognized: ${keyEvent.logicalKey.keyLabel}');
         return false;
@@ -436,38 +475,46 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     Widget annotatedGraph = MouseRegion(
       onEnter: (_) => focusNode.requestFocus(),
       onExit: (_) => focusNode.unfocus(),
-      onHover: _onHover,
+      onHover: (e) => _onHover(e.position),
       child: RawKeyboardListener(
         focusNode: focusNode,
-        child: theGraph,
+        child: GestureDetector(
+          onDoubleTap: _reset,
+          onPanDown: (e) => _dragDown(e.globalPosition),
+          onPanUpdate: (e) => _drag(e.globalPosition),
+          child: theGraph,
+        ),
       ),
     );
 
-    return Column(
-      children: <Widget>[
-        Text('Frame ${_timeline.threadInfo.titleName} Times', style: TextStyle(fontSize: 24),),
-        Text(_hoverStr),
-        Table(
-          columnWidths: <int, TableColumnWidth>{
-            0: FractionColumnWidth(0.8),
-            1: FixedColumnWidth(50),
-          },
-          children: <TableRow>[
-            TableRow(
-              children: <Widget>[
-                annotatedGraph,
-                durationAxis,
-              ],
-            ),
-            TableRow(
-              children: <Widget>[
-                timeAxis,
-                Container(),
-              ]
-            ),
-          ],
-        ),
-      ],
+    return RepaintBoundary(
+      key: _imageKey,
+      child: Column(
+        children: <Widget>[
+          Text('Frame ${_timeline.threadInfo.titleName} Times', style: TextStyle(fontSize: 24),),
+          Text(_hoverString),
+          Table(
+            columnWidths: <int, TableColumnWidth>{
+              0: FractionColumnWidth(0.8),
+              1: FixedColumnWidth(50),
+            },
+            children: <TableRow>[
+              TableRow(
+                children: <Widget>[
+                  annotatedGraph,
+                  durationAxis,
+                ],
+              ),
+              TableRow(
+                children: <Widget>[
+                  timeAxis,
+                  Container(),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

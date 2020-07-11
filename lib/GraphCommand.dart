@@ -8,8 +8,6 @@ import 'dart:async';
 
 import 'package:open_url/open_url.dart';
 import 'package:args/args.dart';
-import 'package:resource/resource.dart' show Resource;
-import 'package:archive/archive.dart';
 
 import 'GraphServer.dart';
 
@@ -82,7 +80,7 @@ abstract class GraphCommand {
       stderr.writeln(error);
       stderr.writeln('');
     }
-    stderr.writeln('Usage: dart $commandName [options (see below)] [<resultsfilename>]\n');
+    stderr.writeln('Usage: dart $commandName [options (see below)] [<results_filename>]\n');
     stderr.writeln(_argParser.usage);
   }
 
@@ -121,20 +119,20 @@ abstract class GraphCommand {
       results.add(GraphResult(arg, json));
     }
 
-    List<String> servedUrls = [];
+    List<ServedResults> servedUrls = [];
     Future<Process> webBuilder;
     if (args[kWebAppLocalOpt] as bool) {
       if (args[kWebAppOpt] as bool) {
         _usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
         return;
       }
-      servedUrls.add(await serveToWebApp(results, true));
+      servedUrls.add(await serveToWebApp(results, webAppPath, verbose));
       webBuilder = buildWebApp(args[kCanvasKitOpt] as bool);
     } else if (args[kCanvasKitOpt] as bool) {
       _usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
       return;
     } else if (args[kWebAppOpt] as bool) {
-      servedUrls.add(await serveToWebApp(results, false));
+      servedUrls.add(await serveToWebApp(results, null, verbose));
     } else {
       if (results.length == 0) {
         servedUrls.add(await launchHtml(null));
@@ -144,16 +142,20 @@ abstract class GraphCommand {
       }
     }
 
-    print('');
-    if (args[kLaunchOpt] as bool) {
-      if (webBuilder != null) {
-        webBuilder.then((process) => process.exitCode.then((_) => launchAll(servedUrls)));
-      } else {
-        launchAll(servedUrls);
-      }
-    } else {
-      print("Type 'l' to launch URL(s) in system default browser.");
+    if (webBuilder != null) {
+      await webBuilder.then((process) => process.exitCode.then((code) {
+        if (code != 0) {
+          print('');
+          print('Compile failed with exit code $code');
+          exit(code);
+        }
+      }));
     }
+
+    print('');
+    printAndLaunchUrls(servedUrls, true, args[kLaunchOpt] as bool);
+    print('');
+    print("Type 'l' to launch URL(s) in system default browser.");
     print("Type 'q' to quit.");
     print('');
     stdin.lineMode = false;
@@ -166,7 +168,7 @@ abstract class GraphCommand {
           }
           exit(0);
         } else if (char == 'l'.codeUnitAt(0)) {
-          launchAll(servedUrls);
+          printAndLaunchUrls(servedUrls, false, true);
         }
       }
     });
@@ -174,17 +176,22 @@ abstract class GraphCommand {
 
   webOut(String origin, String output) {
     for (String line in output.split('\n')) {
-      print('web app [$origin]: $line');
+      print('[$origin]: $line');
     }
   }
 
-  launchAll(List<String> servedUrls) async {
-    for (var url in servedUrls) {
-      await openUrl(url);
+  printAndLaunchUrls(List<ServedResults> servedUrls, bool show, bool launch) async {
+    for (var result in servedUrls) {
+      if (show) {
+        print('Serving ${result.name} at ${result.url}');
+      }
+      if (launch) {
+        await openUrl(result.url);
+      }
     }
   }
 
-  Future<String> launchHtml(GraphResult results) async {
+  Future<ServedResults> launchHtml(GraphResult results) async {
     GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
@@ -202,11 +209,6 @@ abstract class GraphCommand {
     return webapp_repo.path;
   }
 
-  Future<Archive> _loadWebAppArchive() async {
-    Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
-    return ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
-  }
-
   Future<Process> buildWebApp(bool useCanvasKit) {
     List<String> args = [ 'build', 'web' ];
     if (useCanvasKit) {
@@ -214,102 +216,11 @@ abstract class GraphCommand {
     }
     return Process.start('flutter', args, workingDirectory: webAppPath).then((Process process) {
       if (verbose) {
-        process.stdout.transform(utf8.decoder).listen((chunk) => webOut('stdout', chunk));
+        process.stdout.transform(utf8.decoder).listen((chunk) => webOut('web app stdout', chunk));
       }
-      process.stderr.transform(utf8.decoder).listen((chunk) => webOut('stderr', chunk));
-      process.exitCode.then((value) { if (value != 0) { exit(value); } } );
+      process.stderr.transform(utf8.decoder).listen((chunk) => webOut('web app stderr', chunk));
       return process;
     });
-  }
-
-  static final ContentType jsType = ContentType('text', 'javascript');
-  static final ContentType ttfType = ContentType('font', 'ttf');
-
-  ContentType typeFor(String uri) {
-    if (uri.endsWith('.html')) {
-      return ContentType.html;
-    } else if (uri.endsWith('.js')) {
-      return jsType;
-    } else if (uri.endsWith('.ttf')) {
-      return ttfType;
-    } else {
-      return ContentType.binary;
-    }
-  }
-
-  Future<String> serveToWebApp(List<GraphResult> results, bool local) async {
-    Map<String,GraphResult> resultMap = {};
-    for (GraphResult result in results) {
-      if (resultMap.containsKey(result.filename)) {
-        if (resultMap[result.filename].json == result.json) {
-          stderr.writeln('Ignoring duplicate results added for ${result.filename}');
-        } else {
-          stderr.writeln('Conflicting results added for ${result.filename}');
-          exit(-1);
-        }
-      } else {
-        resultMap[result.filename] = result;
-      }
-    }
-    HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    var handler;
-    if (local) {
-      handler = (HttpResponse response, String uri) {
-        File f = File('$webAppPath/build/web$uri');
-        if (!f.existsSync()) {
-          return false;
-        }
-        response.headers.contentType = typeFor(uri);
-        response.headers.contentLength = f.lengthSync();
-        response.addStream(f.openRead()).then((_) => response.close());
-        return true;
-      };
-    } else {
-      Archive webAppArchive = await _loadWebAppArchive();
-      handler = (HttpResponse response, String uri) {
-        ArchiveFile f = webAppArchive.findFile('webapp$uri');
-        if (f == null) {
-          return false;
-        }
-        response.headers.contentType = typeFor(uri);
-        response.headers.contentLength = f.size;
-        response.add(f.content);
-        response.close();
-        return true;
-      };
-    }
-    server.listen((HttpRequest request) {
-      request.response.headers.set('access-control-allow-origin', '*');
-      String uri = request.uri.toString();
-      if (uri == '/list') {
-        List<String> filenames = [ ...resultMap.keys ];
-        String filenameJson = JsonEncoder.withIndent('  ').convert(filenames);
-        request.response.headers.contentType = ContentType.json;
-        request.response.headers.contentLength = filenameJson.length;
-        request.response.write(filenameJson);
-        request.response.close();
-      } else if (uri.startsWith('/result?')) {
-        String key = uri.substring(8);
-        if (resultMap.containsKey(key)) {
-          request.response.headers.contentType = ContentType.json;
-          request.response.headers.contentLength = resultMap[key].json.length;
-          request.response.write(resultMap[key].json);
-          request.response.close();
-        }
-      } else {
-        if (uri == '/') uri = '/index.html';
-        if (!handler(request.response, uri)) {
-          request.response.statusCode = HttpStatus.notFound;
-          request.response.close();
-        }
-      }
-      if (verbose) {
-        print('web app data server served ${request.response.headers.contentLength} bytes: $uri');
-      }
-    });
-    String url = 'http://localhost:${server.port}';
-    print('Serving graphing web app on $url');
-    return url;
   }
 }
 

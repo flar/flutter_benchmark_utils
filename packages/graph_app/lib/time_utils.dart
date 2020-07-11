@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-class TimeVal {
+class TimeVal implements Comparable<TimeVal> {
   static TimeVal max(TimeVal a, TimeVal b) { return a > b ? a : b; }
   static TimeVal min(TimeVal a, TimeVal b) { return a < b ? a : b; }
 
@@ -38,6 +38,9 @@ class TimeVal {
   TimeVal operator * (double s) => TimeVal.fromNanos(this._nanos * s);
 
   @override
+  int compareTo(TimeVal other) => _nanos.compareTo(other._nanos);
+
+  @override
   String toString() {
     if (_nanos < 1000) {
       return 'TimeVal[${nanos.toString()}ns]';
@@ -51,13 +54,14 @@ class TimeVal {
   }
 }
 
-class TimeFrame {
+class TimeFrame implements Comparable<TimeFrame> {
   TimeFrame({this.start, TimeVal end, TimeVal duration})
       : assert(start != null),
         this.end = end == null ? start + duration : end,
         this.duration = duration == null ? end - start : duration,
         assert(end != null),
         assert(duration != null),
+        assert(duration.nanos > 0),
         assert(start + duration == end);
 
   final TimeVal start;
@@ -74,6 +78,9 @@ class TimeFrame {
   bool contains(TimeVal t) => t >= start && t <= end;
 
   TimeFrame operator - (TimeFrame e) => TimeFrame(start: e.end, end: this.start);
+
+  @override
+  int compareTo(TimeFrame other) => start.compareTo(other.start);
 
   @override
   String toString() {

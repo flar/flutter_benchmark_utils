@@ -83,13 +83,13 @@ class TimelineResultsGraphWidget extends StatelessWidget {
 }
 
 abstract class TimelineAxisPainter extends CustomPainter {
-  TimelineAxisPainter(this.graphPainter, this.range, this.units, this.horizontal, int maxTicks)
-      : ticks = makeTicks(range, units, maxTicks);
+  TimelineAxisPainter(this.graphPainter, this.range, this.baseline, this.units, this.horizontal, int maxTicks)
+      : ticks = makeTicks(range, baseline, units, maxTicks);
 
-  static List<TimeVal> makeTicks(TimeFrame range, TimeVal units, int maxTicks) {
+  static List<TimeVal> makeTicks(TimeFrame range, TimeVal baseline, TimeVal units, int maxTicks) {
     TimeVal adjUnit = _optimalTickUnit(range, units, maxTicks);
-    double minTick = (range.start / adjUnit).floorToDouble() + 1;
-    double maxTick = (range.end   / adjUnit).ceilToDouble()  - 1;
+    double minTick = ((range.start - baseline) / adjUnit).floorToDouble() + 1;
+    double maxTick = ((range.end   - baseline) / adjUnit).ceilToDouble()  - 1;
     return <TimeVal>[
       for (double t = minTick; t <= maxTick; t++)
         adjUnit * t,
@@ -111,6 +111,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
 
   final TimelineGraphPainter graphPainter;
   final TimeFrame range;
+  final TimeVal baseline;
   final TimeVal units;
   final bool horizontal;
   final List<TimeVal> ticks;
@@ -123,7 +124,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
       color: Colors.black,
     );
     for (TimeVal t in ticks) {
-      double fraction = range.getFraction(t);
+      double fraction = range.getFraction(baseline + t);
       double x, y;
       if (horizontal) {
         x = fraction * size.width;
@@ -158,6 +159,7 @@ class TimelineHAxisPainter extends TimelineAxisPainter {
       start: graphPainter.run.elapsedTime(graphPainter.zoom.left),
       end:   graphPainter.run.elapsedTime(graphPainter.zoom.right),
     ),
+    graphPainter.run.start,
     TimeVal.fromSeconds(1),
     true,
     25,
@@ -171,6 +173,7 @@ class TimelineVAxisPainter extends TimelineAxisPainter {
       start: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
       end:   graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
     ),
+    TimeVal.fromMillis(0),
     TimeVal.fromMillis(1),
     false,
     10,
@@ -387,12 +390,10 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   void _dragDown(Offset position) {
-    print('drag down at $position');
     _dragAnchor = _getWidgetRelativePosition(position);
   }
 
   void _drag(Offset position) {
-    print('drag move to $position');
     Offset newAnchor = _getWidgetRelativePosition(position);
     Offset relative = _dragAnchor - newAnchor;
     _dragAnchor = newAnchor;

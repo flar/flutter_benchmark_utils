@@ -90,9 +90,10 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> {
     setMessage('Loading results from $key...', key);
     performGet('/result?$key', (http.Response response) {
       if (response.statusCode == 200) {
-        try {
-          setResults(key, TimelineResults.fromJson(JsonDecoder().convert(response.body)));
-        } catch (e) {
+        TimelineResults results = TimelineResults(JsonDecoder().convert(response.body));
+        if (results != null) {
+          setResults(key, results);
+        } else {
           setMessage('Error: Results file for $key was not in a recognizable format.');
         }
       } else {

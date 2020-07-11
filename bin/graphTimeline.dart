@@ -9,6 +9,7 @@ class TimelineGraphCommand extends GraphCommand {
 
   @override
   String validateJson(Map<String, dynamic> jsonMap) {
+    if (jsonMap.containsKey('traceEvents')) return null;
     return validateJsonEntryIsNumberList(jsonMap, 'frame_build_times')
         ?? validateJsonEntryIsNumberList(jsonMap, 'frame_rasterizer_times');
   }

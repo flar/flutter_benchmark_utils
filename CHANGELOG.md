@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.25] - 2020/07/11
+
+* graphTimeline now reads raw event timelines in addition to timeline_summary files
+
 ## [0.0.24] - 2020/07/11
 
 * mouse panning in zoomed timeline charts

@@ -160,7 +160,7 @@ class TimelineHAxisPainter extends TimelineAxisPainter {
       end:   graphPainter.run.elapsedTime(graphPainter.zoom.right),
     ),
     graphPainter.run.start,
-    TimeVal.fromSeconds(1),
+    TimeVal.oneSecond,
     true,
     25,
   );
@@ -173,8 +173,8 @@ class TimelineVAxisPainter extends TimelineAxisPainter {
       start: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
       end:   graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
     ),
-    TimeVal.fromMillis(0),
-    TimeVal.fromMillis(1),
+    TimeVal.zero,
+    TimeVal.oneMillisecond,
     false,
     10,
   );
@@ -229,7 +229,7 @@ class TimelineGraphPainter extends CustomPainter {
     paint.color = Colors.grey.shade200;
     TimeFrame prevFrame = timeline.first;
     for (TimeFrame frame in timeline.skip(1)) {
-      TimeFrame gap = frame - prevFrame;
+      TimeFrame gap = frame.gapFrameSince(prevFrame);
       if (gap.duration.millis > 16) {
         canvas.drawRect(getMaxRect(gap, view), paint);
       }

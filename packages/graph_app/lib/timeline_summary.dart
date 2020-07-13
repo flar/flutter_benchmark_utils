@@ -70,8 +70,8 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     List<TimeFrame> immutableFrames = List.unmodifiable(frames);
 
     // Then sort by duration for statistics
-    frames.sort((t1, t2) => t1.duration.compareTo(t2.duration));
-    TimeVal durationSum = frames.fold(TimeVal.fromNanos(0), (prev, e) => prev + e.duration);
+    frames.sort(TimeFrame.durationOrder);
+    TimeVal durationSum = frames.fold(TimeVal.zero, (prev, e) => prev + e.duration);
     return TimelineThreadResults._internal(
       threadInfo: threadInfo,
       frames:     immutableFrames,
@@ -143,7 +143,7 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
       }
     }
     if (!isSorted) {
-      frames.sort();
+      frames.sort(TimeFrame.startOrder);
     }
     return frames;
   }

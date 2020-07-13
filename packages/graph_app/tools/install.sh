@@ -84,4 +84,4 @@ rm -f $DEST_ZIP_FILE
 rm -rf $TAR_TMP_DIR
 
 echo
-echo New web app archive installed in $DEST_TAR_FILE and $DEST_ZIP_FILE
+echo New web app archive installed in $DEST_ZIP_FILE

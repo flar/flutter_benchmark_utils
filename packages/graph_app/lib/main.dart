@@ -107,6 +107,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Timeline Graphing Page'),
+        centerTitle: true,
         actions: <Widget>[
           DropdownButton<String>(
             onChanged: (key) => getResults(key),

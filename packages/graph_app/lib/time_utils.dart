@@ -51,8 +51,7 @@ class TimeVal implements Comparable<TimeVal> {
   double  operator / (TimeVal t) => this._nanos / t._nanos;
   TimeVal operator * (double s)  => TimeVal._(this._nanos * s);
 
-  @override
-  int compareTo(TimeVal other) => _nanos.compareTo(other._nanos);
+  @override int compareTo(TimeVal other) => _nanos.compareTo(other._nanos);
 
   @override
   String toString() {
@@ -125,6 +124,8 @@ class TimeFrame {
       ? TimeFrame(start: f.end, end: this.start)
       : TimeFrame.zero;
 
+  TimeFrame operator - (TimeVal t) => TimeFrame._(this.start - t, this.end - t, this.duration);
+
   static int startOrder   (TimeFrame a, TimeFrame b) => a.start   .compareTo(b.start);
   static int endOrder     (TimeFrame a, TimeFrame b) => a.end     .compareTo(b.end);
   static int durationOrder(TimeFrame a, TimeFrame b) => a.duration.compareTo(b.duration);
@@ -134,7 +135,8 @@ class TimeFrame {
   static int reverseDurationOrder(TimeFrame a, TimeFrame b) => b.duration.compareTo(a.duration);
 
   @override int get hashCode => (start.hashCode + 17) * 23 + end.hashCode;
-  @override bool operator == (dynamic t) => t is TimeFrame && this.start == t.start && this.end == t.end;
+  @override bool operator == (dynamic t) =>
+      (t is TimeFrame && this.start == t.start && this.end == t.end);
 
   @override
   String toString() {

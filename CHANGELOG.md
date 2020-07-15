@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.26] - 2020/07/15
+
+* graphTimeline can now graph any begin/event sequences in a raw timeline
+
 ## [0.0.25] - 2020/07/11
 
 * graphTimeline now reads raw event timelines in addition to timeline_summary files

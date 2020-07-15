@@ -15,103 +15,148 @@ final List<Color> heatColors = [
   Colors.red,
 ];
 
-class TimelineResultsGraphWidget extends StatelessWidget {
+class TimelineResultsGraphWidget extends StatefulWidget {
   TimelineResultsGraphWidget(this.results)
-      : this.worst = TimeVal.max(results.buildData.worst, results.renderData.worst),
-        assert(results != null);
+      : assert(results != null);
 
   final TimelineResults results;
-  final TimeVal worst;
 
-  TableRow _makeTableRow(String name, TimeVal value, Color color) {
-    return TableRow(
-      children: [
+  @override
+  State createState() => TimelineResultsGraphWidgetState();
+}
+
+class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> {
+  ScrollController _controller;
+  List<TimelineGraphWidget> _graphs;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ScrollController();
+    _graphs = <TimelineGraphWidget>[
+      TimelineGraphWidget(widget.results.buildData, _closeGraph),
+      TimelineGraphWidget(widget.results.renderData, _closeGraph),
+    ];
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _closeGraph(TimelineGraphWidget graph) {
+    setState(() => _graphs.remove(graph));
+  }
+
+  void _addGraph(String measurement) {
+    TimelineThreadResults results = widget.results.getResults(measurement);
+    TimelineGraphWidget graph = TimelineGraphWidget(results, _closeGraph);
+    setState(() => _graphs.add(graph));
+  }
+
+  bool isGraphed(String measurement) {
+    for (TimelineGraphWidget graph in _graphs) {
+      if (graph.timeline.titleName == measurement) return true;
+    }
+    return false;
+  }
+  bool isNotGraphed(String measurement) => !isGraphed(measurement);
+
+  @override
+  Widget build(BuildContext context) {
+    List<String> remainingMeasurements = widget.results.measurements.where(isNotGraphed);
+    return Stack(
+      children: <Widget>[
         Container(
-          padding: EdgeInsets.only(right: 5.0, top: 10.0),
-          child: Text(name, textAlign: TextAlign.right),
-        ),
-        Container(
-          padding: EdgeInsets.only(left: 5.0, top: 10.0),
-          child: Text(value.stringMillis()),
-        ),
-        Container(
-          alignment: Alignment.centerLeft,
-          padding: EdgeInsets.only(left: 5.0, top: 10.0),
-          width: 100.0,
-          height: 20.0,
-          child: FractionallySizedBox(
-            widthFactor: value / worst,
-            child: Container(
-              color: color,
+          child: SingleChildScrollView(
+            controller: _controller,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (TimelineGraphWidget graph in _graphs)
+                  Container(
+                    margin: EdgeInsets.only(top: 20, bottom: 20),
+                    child: graph,
+                  ),
+                Container(
+                  margin: EdgeInsets.only(top: 20, bottom: 20),
+                  child: TimelineGraphAdditionalWidget(remainingMeasurements, _addGraph),
+                ),
+              ],
             ),
           ),
         ),
       ],
     );
   }
+}
 
-  List<TableRow> _makeTableRows(TimelineThreadResults tr) {
-    return <TableRow>[
-      _makeTableRow(tr.threadInfo.averageKey,   tr.average,   heatColors[0]),
-      _makeTableRow(tr.threadInfo.percent90Key, tr.percent90, heatColors[1]),
-      _makeTableRow(tr.threadInfo.percent99Key, tr.percent99, heatColors[2]),
-      _makeTableRow(tr.threadInfo.worstKey,     tr.worst,     heatColors[3]),
-    ];
-  }
+class TimelineGraphAdditionalWidget extends StatelessWidget {
+  TimelineGraphAdditionalWidget(this.measurements, this.addCallback);
+
+  final List<String> measurements;
+  final Function(String) addCallback;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    Column w = Column(
       children: <Widget>[
-        Table(
-          columnWidths: {
-            0: FixedColumnWidth(300.0),
-            1: FixedColumnWidth(200.0),
-            2: FixedColumnWidth(300.0),
-          },
-          children: <TableRow>[
-            ..._makeTableRows(results.buildData),
-            ..._makeTableRows(results.renderData),
+        DropdownButton(
+          icon: Icon(Icons.add),
+          onChanged: addCallback,
+          hint: Text('Add a new graph'),
+          items: [
+            for (String measurement in measurements)
+              DropdownMenuItem(value: measurement, child: Text(measurement)),
           ],
         ),
-        TimelineGraphWidget(results.buildData),
-        TimelineGraphWidget(results.renderData),
       ],
     );
+    return w;
   }
 }
 
 abstract class TimelineAxisPainter extends CustomPainter {
-  TimelineAxisPainter(this.graphPainter, this.range, this.baseline, this.units, this.horizontal, int maxTicks)
-      : ticks = makeTicks(range, baseline, units, maxTicks);
+  TimelineAxisPainter({
+    this.range,
+    this.units,
+    this.horizontal,
+    int minTicks,
+    int maxTicks,
+  })
+      : ticks = makeTicks(range, _optimalTickUnit(range, units, minTicks, maxTicks));
 
-  static List<TimeVal> makeTicks(TimeFrame range, TimeVal baseline, TimeVal units, int maxTicks) {
-    TimeVal adjUnit = _optimalTickUnit(range, units, maxTicks);
-    double minTick = ((range.start - baseline) / adjUnit).floorToDouble() + 1;
-    double maxTick = ((range.end   - baseline) / adjUnit).ceilToDouble()  - 1;
+  static List<TimeVal> makeTicks(TimeFrame range, TimeVal tickUnit) {
+    double minTick = (range.start / tickUnit).floorToDouble() + 1;
+    double maxTick = (range.end   / tickUnit).ceilToDouble()  - 1;
     return <TimeVal>[
       for (double t = minTick; t <= maxTick; t++)
-        adjUnit * t,
+        tickUnit * t,
     ];
   }
 
-  static TimeVal _optimalTickUnit(TimeFrame range, TimeVal proposedUnit, int maxTicks) {
-    if (_isTickUnitOptimal(range, proposedUnit, maxTicks)) return proposedUnit;
-    if (_isTickUnitOptimal(range, proposedUnit * 2, maxTicks)) return proposedUnit * 2;
-    if (_isTickUnitOptimal(range, proposedUnit * 5, maxTicks)) return proposedUnit * 5;
-    return _optimalTickUnit(range, proposedUnit * 10, maxTicks);
+  static TimeVal _optimalTickUnit(TimeFrame range, TimeVal proposedUnit, int minTicks, int maxTicks) {
+    int numTicks = _numTicks(range, proposedUnit);
+    if (numTicks < minTicks) {
+      return _optimalTickUnit(range, proposedUnit * 0.10, minTicks, maxTicks);
+    }
+    if (numTicks <= maxTicks) {
+      return proposedUnit;
+    }
+    if (_numTicks(range, proposedUnit * 2) <= maxTicks) return proposedUnit * 2;
+    if (_numTicks(range, proposedUnit * 5) <= maxTicks) return proposedUnit * 5;
+    return _optimalTickUnit(range, proposedUnit * 10, minTicks, maxTicks);
   }
 
-  static bool _isTickUnitOptimal(TimeFrame range, TimeVal proposedUnit, int maxTicks) {
-    double minTick = (range.start / proposedUnit).floorToDouble() + 1;
-    double maxTick = (range.end   / proposedUnit).ceilToDouble()  - 1;
-    return (maxTick - minTick + 1 <= maxTicks);
+  static int _numTicks(TimeFrame range, TimeVal proposedUnit) {
+    int minTick = (range.start / proposedUnit).floor() + 1;
+    int maxTick = (range.end   / proposedUnit).ceil()  - 1;
+    return (maxTick - minTick + 1);
   }
 
-  final TimelineGraphPainter graphPainter;
   final TimeFrame range;
-  final TimeVal baseline;
   final TimeVal units;
   final bool horizontal;
   final List<TimeVal> ticks;
@@ -124,7 +169,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
       color: Colors.black,
     );
     for (TimeVal t in ticks) {
-      double fraction = range.getFraction(baseline + t);
+      double fraction = range.getFraction(t);
       double x, y;
       if (horizontal) {
         x = fraction * size.width;
@@ -135,7 +180,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
         y = (1.0 - fraction) * size.height;
         canvas.drawLine(Offset(5, y), Offset(10, y), paint);
       }
-      String label = (t / units).toStringAsFixed(1);
+      String label = (t / units).toString();
       TextSpan span = new TextSpan(text: label, style: style);
       TextPainter textPainter = TextPainter(text: span);
       textPainter.layout();
@@ -154,41 +199,40 @@ abstract class TimelineAxisPainter extends CustomPainter {
 
 class TimelineHAxisPainter extends TimelineAxisPainter {
   TimelineHAxisPainter(TimelineGraphPainter graphPainter) : super(
-    graphPainter,
-    TimeFrame(
+    range: TimeFrame(
       start: graphPainter.run.elapsedTime(graphPainter.zoom.left),
       end:   graphPainter.run.elapsedTime(graphPainter.zoom.right),
-    ),
-    graphPainter.run.start,
-    TimeVal.oneSecond,
-    true,
-    25,
+    ) - graphPainter.run.start,
+    units: TimeVal.oneSecond,
+    horizontal: true,
+    minTicks: 10,
+    maxTicks: 25,
   );
 }
 
 class TimelineVAxisPainter extends TimelineAxisPainter {
   TimelineVAxisPainter(TimelineGraphPainter graphPainter) : super(
-    graphPainter,
-    TimeFrame(
+    range: TimeFrame(
       start: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
       end:   graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
     ),
-    TimeVal.zero,
-    TimeVal.oneMillisecond,
-    false,
-    10,
+    units: TimeVal.oneMillisecond,
+    horizontal: false,
+    minTicks: 4,
+    maxTicks: 10,
   );
 }
 
 class TimelineGraphPainter extends CustomPainter {
   static const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
 
-  TimelineGraphPainter(this.timeline, [this.zoom = unitRect])
+  TimelineGraphPainter(this.timeline, [this.zoom = unitRect, this.showInactiveRegions = false])
       : run = timeline.wholeRun;
 
   final TimelineThreadResults timeline;
   final TimeFrame run;
   final Rect zoom;
+  final bool showInactiveRegions;
 
   TimelineHAxisPainter _timePainter;
   TimelineHAxisPainter get timePainter => _timePainter ??= TimelineHAxisPainter(this);
@@ -199,11 +243,23 @@ class TimelineGraphPainter extends CustomPainter {
   double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width  * run.getFraction(t);
   double getY(TimeVal d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
 
-  Rect _getRectBar(TimeFrame f, double barY, Rect view) =>
-      Rect.fromLTRB(getX(f.start, view), barY, getX(f.end, view), view.height);
+  Rect _getRectBar(TimeFrame f, double barY, Rect view, double minWidth) {
+    double startX = getX(f.start, view);
+    double endX = getX(f.end, view);
+    if (minWidth > 0) {
+      double pad = minWidth - (endX - startX);
+      if (pad > 0) {
+        startX -= pad / 2;
+        endX += pad / 2;
+      }
+    }
+    return Rect.fromLTRB(startX, barY, endX, view.height);
+  }
 
-  Rect getRect(TimeFrame f, Rect view) => _getRectBar(f, getY(f.duration, view), view);
-  Rect getMaxRect(TimeFrame f, Rect bounds) => _getRectBar(f, 0, bounds);
+  Rect getRect(TimeFrame f, Rect view, double minWidth) =>
+      _getRectBar(f, getY(f.duration, view), view, minWidth);
+  Rect getMaxRect(TimeFrame f, Rect bounds) =>
+      _getRectBar(f, 0, bounds, 0.0);
 
   void drawLine(Canvas canvas, Size size, Paint paint, double y, Color heatColor) {
     paint.color = heatColor.withAlpha(128);
@@ -221,19 +277,22 @@ class TimelineGraphPainter extends CustomPainter {
 
     canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
     canvas.translate(-zoom.left * size.width, -zoom.top * size.height);
+    double minWidth = zoom.width;
 
     Paint paint = Paint();
 
-    // Draw gaps first
-    paint.style = PaintingStyle.fill;
-    paint.color = Colors.grey.shade200;
-    TimeFrame prevFrame = timeline.first;
-    for (TimeFrame frame in timeline.skip(1)) {
-      TimeFrame gap = frame.gapFrameSince(prevFrame);
-      if (gap.duration.millis > 16) {
-        canvas.drawRect(getMaxRect(gap, view), paint);
+    // Draw gaps first (if enabled)
+    if (showInactiveRegions) {
+      paint.style = PaintingStyle.fill;
+      paint.color = Colors.grey.shade200;
+      TimeFrame prevFrame = timeline.first;
+      for (TimeFrame frame in timeline.skip(1)) {
+        TimeFrame gap = frame.gapFrameSince(prevFrame);
+        if (gap.duration.millis > 16) {
+          canvas.drawRect(getMaxRect(gap, view), paint);
+        }
+        prevFrame = frame;
       }
-      prevFrame = frame;
     }
 
     // Then lines over gaps
@@ -246,7 +305,7 @@ class TimelineGraphPainter extends CustomPainter {
     paint.style = PaintingStyle.fill;
     for (TimeFrame frame in timeline) {
       paint.color = heatColors[timeline.heatIndex(frame.duration)];
-      canvas.drawRect(getRect(frame, view), paint);
+      canvas.drawRect(getRect(frame, view, minWidth), paint);
     }
   }
 
@@ -255,22 +314,22 @@ class TimelineGraphPainter extends CustomPainter {
 }
 
 class TimelineGraphWidget extends StatefulWidget {
-  TimelineGraphWidget(this._timeline);
+  TimelineGraphWidget(this.timeline, this.closeCallback) : super(key: ObjectKey(timeline));
 
-  final TimelineThreadResults _timeline;
+  final TimelineThreadResults timeline;
+  final Function(TimelineGraphWidget) closeCallback;
 
-  @override
-  State createState() => TimelineGraphWidgetState(_timeline);
+  @override State createState() => TimelineGraphWidgetState(timeline);
 }
 
 class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
-  TimelineGraphWidgetState(this._timeline)
+  TimelineGraphWidgetState(this.timeline)
       : _mouseKey = GlobalKey(),
         _imageKey = GlobalKey(),
-        _painter = TimelineGraphPainter(_timeline),
+        _painter = TimelineGraphPainter(timeline),
         _hoverString = '';
 
-  final TimelineThreadResults _timeline;
+  final TimelineThreadResults timeline;
   final GlobalKey _mouseKey;
   final GlobalKey _imageKey;
   FocusNode focusNode;
@@ -297,14 +356,15 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   TimeFrame _hoverFrame;
   String _hoverString;
 
-  void _setHoverEvent(TimeFrame e) {
-    if (_hoverFrame != e) {
+  void _setHoverEvent(TimeFrame newHoverFrame) {
+    if (_hoverFrame != newHoverFrame) {
+      TimeFrame e = newHoverFrame - timeline.wholeRun.start;
       String start = e.start.stringSeconds();
       String end = e.end.stringSeconds();
       String dur = e.duration.stringMillis();
-      String label = _timeline.labelFor(e.duration);
+      String label = timeline.labelFor(e.duration);
       setState(() {
-        _hoverFrame = e;
+        _hoverFrame = newHoverFrame;
         _hoverString = 'frame[$start => $end] = $dur ($label)';
       });
     }
@@ -368,25 +428,25 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   void _onHover(Offset position) {
     Offset relative = _getViewRelativePosition(position);
     _zoomAnchor = relative;
-    TimeVal t = _timeline.wholeRun.elapsedTime(relative.dx);
-    TimeFrame e = _timeline.eventNear(t);
+    TimeVal t = timeline.wholeRun.elapsedTime(relative.dx);
+    TimeFrame e = timeline.eventNear(t);
     _setHoverEvent(e);
   }
 
   void _zoom(Offset relative, double scale) {
     Rect zoom = _scaleRectAround(_painter.zoom, relative, Size(scale, scale));
     zoom = _keepInside(zoom, TimelineGraphPainter.unitRect);
-    setState(() => _painter = TimelineGraphPainter(_timeline, zoom));
+    setState(() => _painter = TimelineGraphPainter(timeline, zoom));
   }
 
   void _move(double dx, double dy) {
     Rect view = _painter.zoom.translate(_painter.zoom.width * dx, _painter.zoom.height * dy);
     view = _keepInside(view, TimelineGraphPainter.unitRect);
-    setState(() => _painter = TimelineGraphPainter(_timeline, view));
+    setState(() => _painter = TimelineGraphPainter(timeline, view));
   }
 
   void _reset() {
-    setState(() => _painter = TimelineGraphPainter(_timeline));
+    setState(() => _painter = TimelineGraphPainter(timeline));
   }
 
   void _dragDown(Offset position) {
@@ -488,27 +548,85 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
     );
 
+    Row _makeLegendItem(String name, TimeVal value, Color color) {
+      return Row(
+        children: [
+          Container(alignment: Alignment.center, color: color, width: 12, height: 12,),
+          Container(width: 10),
+          Text('$name: ${value.stringMillis()}'),
+        ],
+      );
+    }
+    Row legend = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: <Widget>[
+        _makeLegendItem('average value',   timeline.average,   heatColors[0]),
+        _makeLegendItem('90th percentile', timeline.percent90, heatColors[1]),
+        _makeLegendItem('99th percentile', timeline.percent99, heatColors[2]),
+        _makeLegendItem('worst value',     timeline.worst,     heatColors[3]),
+      ],
+    );
+
     return RepaintBoundary(
       key: _imageKey,
       child: Column(
         children: <Widget>[
-          Text('Frame ${_timeline.threadInfo.titleName} Times', style: TextStyle(fontSize: 24),),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text('Frame ${timeline.titleName} Times', style: TextStyle(fontSize: 24),),
+              IconButton(
+                icon: Icon(Icons.close),
+                onPressed: () => widget.closeCallback(widget),
+              ),
+            ]
+          ),
           Text(_hoverString),
+
+          // Table layout:
+          //  +---------------------+---+
+          //  |                     | v |
+          //  |                     | A |
+          //  |        Graph        | x |
+          //  |                     | i |
+          //  |                     | s |
+          //  +---------------------+---+
+          //  |        hAxis        |   |
+          //  +---------------------+---+
+          //  +---------------------+---+
+          //  |  legend1...legend4  |   |
+          //  +---------------------+---+
           Table(
             columnWidths: <int, TableColumnWidth>{
               0: FractionColumnWidth(0.8),
               1: FixedColumnWidth(50),
             },
             children: <TableRow>[
+              // Main graph and vertical axis aligned to right of graph
               TableRow(
                 children: <Widget>[
                   annotatedGraph,
                   durationAxis,
                 ],
               ),
+              // Horizontal axis aligned below graph
               TableRow(
                 children: <Widget>[
                   timeAxis,
+                  Container(),
+                ],
+              ),
+              // Spacer
+              TableRow(
+                children: <Widget>[
+                  Container(height: 15),
+                  Container(),
+                ],
+              ),
+              // Legend below graph
+              TableRow(
+                children: <Widget>[
+                  legend,
                   Container(),
                 ],
               ),

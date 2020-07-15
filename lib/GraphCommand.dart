@@ -214,6 +214,9 @@ abstract class GraphCommand {
     if (useCanvasKit) {
       args.add('--dart-define=FLUTTER_WEB_USE_SKIA=true');
     }
+    if (verbose) {
+      print('[web app command]: flutter ${args.join(' ')}');
+    }
     return Process.start('flutter', args, workingDirectory: webAppPath).then((Process process) {
       if (verbose) {
         process.stdout.transform(utf8.decoder).listen((chunk) => webOut('web app stdout', chunk));

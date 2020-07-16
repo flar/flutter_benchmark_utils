@@ -53,8 +53,15 @@ pub global run flutter_benchmark_utils:graphTimeline test.timeline_summary.json
 or with the pub global bin directory in your path:
 
 ```shell
-graphTimeline test.timeline_summary.json
+graphTimeline test.timeline_summary.json [--web]
 ```
 
 The script behaves analogously to the graphAB script in terms of launching a browser and
 quitting.
+
+The `graphTimeline` script also has the additional benefit of a Flutter web implementation
+that is expanded over the basic graphing mechanism. Simply specify `--web` on the command
+line to use the new mechanism. The web version improves upon the original by opening only
+a single page to view multiple timeline files, switchable using a drop-down menu item in
+the title bar, and it also supports graphing from raw event timeline files - allowing you
+to graph any of the event streams in the file, not just the frame Build and Render timings.

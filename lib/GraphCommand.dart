@@ -158,8 +158,8 @@ abstract class GraphCommand {
     print("Type 'l' to launch URL(s) in system default browser.");
     print("Type 'q' to quit.");
     print('');
-    stdin.lineMode = false;
     stdin.echoMode = false;
+    stdin.lineMode = false;
     stdin.listen((List<int> chars) async {
       for (int char in chars) {
         if (char == 'q'.codeUnitAt(0)) {

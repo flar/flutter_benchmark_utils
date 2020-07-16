@@ -8,7 +8,7 @@ class ABGraphCommand extends GraphCommand {
   ABGraphCommand() : super('graphAB');
 
   @override
-  String validateJson(Map<String, dynamic> jsonMap) {
+  String validateJson(Map<String, dynamic> jsonMap, bool isWebClient) {
     return validateJsonEntryMatches(jsonMap, 'benchmark_type', 'A/B summaries')
         ?? validateJsonEntryMatches(jsonMap, 'version', '1.0')
         ?? validateJsonEntryMapsStringToNumberList(jsonMap, 'default_results')

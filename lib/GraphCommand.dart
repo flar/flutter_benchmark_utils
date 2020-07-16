@@ -71,7 +71,7 @@ abstract class GraphCommand {
     return null;
   }
 
-  String validateJson(Map<String,dynamic> jsonMap);
+  String validateJson(Map<String,dynamic> jsonMap, bool webClient);
 
   void _usage(String error) {
     if (error != null) {
@@ -84,7 +84,7 @@ abstract class GraphCommand {
     stderr.writeln(_argParser.usage);
   }
 
-  String _validateJsonFile(String filename) {
+  String _validateJsonFile(String filename, bool webClient) {
     File file = File(filename);
     if (!file.existsSync()) {
       _usage('$filename does not exist');
@@ -92,7 +92,7 @@ abstract class GraphCommand {
     }
     String json = file.readAsStringSync();
     Map<String,dynamic> jsonMap = JsonDecoder().convert(json);
-    String error = validateJson(jsonMap);
+    String error = validateJson(jsonMap, webClient);
     if (error == null) {
       return json;
     }
@@ -111,8 +111,9 @@ abstract class GraphCommand {
     verbose = args[kVerboseOpt] as bool;
 
     List<GraphResult> results = [];
+    bool isWebClient = args[kWebAppLocalOpt] || args[kWebAppOpt];
     for (String arg in args.rest) {
-      String json = _validateJsonFile(arg);
+      String json = _validateJsonFile(arg, isWebClient);
       if (json == null) {
         return;
       }

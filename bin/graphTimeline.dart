@@ -8,8 +8,10 @@ class TimelineGraphCommand extends GraphCommand {
   TimelineGraphCommand() : super('graphTimeline');
 
   @override
-  String validateJson(Map<String, dynamic> jsonMap) {
-    if (jsonMap.containsKey('traceEvents')) return null;
+  String validateJson(Map<String, dynamic> jsonMap, bool isWebClient) {
+    if (jsonMap.containsKey('traceEvents')) {
+      return isWebClient ? null : 'Raw Event Timeline is only supported by web client';
+    }
     return validateJsonEntryIsNumberList(jsonMap, 'frame_build_times')
         ?? validateJsonEntryIsNumberList(jsonMap, 'frame_rasterizer_times');
   }

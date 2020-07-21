@@ -30,103 +30,132 @@ class _TimelineGraphPage extends StatefulWidget {
   State createState() => _TimelineGraphPageState();
 }
 
-class _TimelineGraphPageState extends State<_TimelineGraphPage> {
-  List<String> _keys = <String>[];
-  String _currentKey;
-  Widget _body;
+void performGet(String url, void onValue(http.Response value), void onError(String msg)) async {
+  await http.get(url)
+      .then(onValue)
+      .catchError((error) => onError('Error contacting results server: $error'));
+}
+
+class _GraphTab {
+  _GraphTab(this.name, this.graph);
+
+  final String name;
+  final Widget graph;
+}
+
+class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTickerProviderStateMixin {
+  List<_GraphTab> _tabs;
+  String _message;
 
   @override
   void initState() {
     super.initState();
-    setMessage('Loading list of results...');
+    _tabs = <_GraphTab>[];
     getList();
   }
 
   void setMessage(String message, [String key]) {
     setState(() {
-      _currentKey = key;
-      _body = Text(message.toString());
-    });
-  }
-
-  void setResults(String key, TimelineResults results) {
-    setState(() {
-      _currentKey = key;
-      _body = TimelineResultsGraphWidget(results);
+      _message = message;
     });
   }
 
   void addKey(String name) {
     setState(() {
-      _keys.add(name);
+      _message = null;
+      _tabs.add(_GraphTab(name, _TimelineLoaderPage(name)));
     });
   }
 
-  void performGet(String url, void onValue(http.Response value)) async {
-    await http.get(url)
-        .then(onValue)
-        .catchError((error) => setMessage('Error contacting results server: $error'));
-  }
-
   void getList() {
+    setMessage('Loading list of results...');
     performGet('/list', (http.Response response) {
       if (response.statusCode == 200) {
         dynamic json = JsonDecoder().convert(response.body);
         for (String key in json) {
           addKey(key);
         }
-        if (_keys.isNotEmpty) {
-          getResults(_keys[0]);
-        } else {
+        if (_tabs.isEmpty) {
           setMessage('No results to load');
         }
       } else {
         setMessage('Cannot load list of results, status = ${response.statusCode}');
       }
+    }, (String msg) => setMessage(msg));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: _tabs.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Timeline Graphing Page'),
+          centerTitle: true,
+          bottom: TabBar(
+            isScrollable: true,
+            tabs: [ ..._tabs.map((tab) => Text(tab.name)) ],
+          ),
+        ),
+        body: _message != null ? Text(_message) : TabBarView(
+          children: [ ..._tabs.map((tab) => tab.graph) ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineLoaderPage extends StatefulWidget {
+  _TimelineLoaderPage(this.pageKey);
+
+  final String pageKey;
+
+  @override
+  State createState() => _TimelineLoaderPageState();
+}
+
+class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with AutomaticKeepAliveClientMixin {
+  Widget _body;
+
+  @override
+  void initState() {
+    super.initState();
+    getResults(widget.pageKey);
+  }
+
+  @override bool get wantKeepAlive => true;
+
+  void setMessage(String message) {
+    setState(() {
+      _body = Center(child:Text(message.toString()));
+    });
+  }
+
+  void setResults(TimelineResults results) {
+    setState(() {
+      _body = RepaintBoundary(child: TimelineResultsGraphWidget(results));
     });
   }
 
   void getResults(String key) {
-    setMessage('Loading results from $key...', key);
+    setMessage('Loading results from $key...');
     performGet('/result?$key', (http.Response response) {
       if (response.statusCode == 200) {
         TimelineResults results = TimelineResults(JsonDecoder().convert(response.body));
         if (results != null) {
-          setResults(key, results);
+          setResults(results);
         } else {
           setMessage('Error: Results file for $key was not in a recognizable format.');
         }
       } else {
         setMessage('Error: Cannot load results for $key, status = ${response.statusCode}');
       }
-    });
+    }, (String msg) => setMessage(msg));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Timeline Graphing Page'),
-        centerTitle: true,
-        actions: <Widget>[
-          DropdownButton<String>(
-            onChanged: (key) => getResults(key),
-            value: _currentKey,
-            icon: const Icon(
-              Icons.arrow_downward,
-              color: Colors.white,
-            ),
-            items: <DropdownMenuItem<String>>[
-              for (String key in _keys)
-                DropdownMenuItem(value: key, child: Text(key),),
-            ],
-          ),
-          Padding(padding: EdgeInsets.only(right: 50.0),),
-        ],
-      ),
-      body: Center(
-        child: _body,
-      ),
-    );
+    super.build(context);
+    return _body;
   }
 }

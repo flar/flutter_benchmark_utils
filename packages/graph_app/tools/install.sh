@@ -2,8 +2,12 @@
 
 function usage {
   echo
-  echo This command must be run after \'flutter build web\' from either
-  echo the tools or build directory of the graph_app package.
+  echo "install.sh [ -n | --no-build ]"
+  echo
+  echo This command cleans and rebuilds the web app with the ClientKit option. It must be run
+  must from either the main directory of the graph_app package or one of its direct subdirectories.
+  echo
+  echo "--no-build (-n)   Do not force a rebuild of the app"
   echo
   exit 1
 }
@@ -22,15 +26,51 @@ function check_dir {
   fi
 }
 
+BUILD=true
+
+for arg in $*
+do
+  if [ "$arg" == "-n" ]; then
+    BUILD=false
+  elif [ "$arg" == "--no-build" ]; then
+    BUILD=false
+  else
+    echo Unrecognized argument: "$arg"
+    usage
+  fi
+done
+
 # Relative directories for our source files and destination archive
-BUILD_DIR=../build
+SRC_EXAMPLE_FILE=lib/timeline_summary_graphing.dart
+
+if [ -f $SRC_EXAMPLE_FILE ]; then
+  REPO_DIR=.
+elif [ -f ../$SRC_EXAMPLE_FILE ]; then
+  REPO_DIR=..
+else
+  usage
+fi
+
+BUILD_DIR=$REPO_DIR/build
+
+if [ $BUILD == true ]; then
+  echo "---" Cleaning build
+  (cd $REPO_DIR; flutter clean)
+  echo "---" Building web app with ClientKit
+  (cd $REPO_DIR; flutter build web --dart-define=FLUTTER_WEB_USE_SKIA=true)
+else
+  check_dir $BUILD_DIR
+fi
+
 WEB_DIR_NAME=web
 TAR_TMP_DIR_NAME=webapp
 
 WEB_DIR=$BUILD_DIR/$WEB_DIR_NAME
 TAR_TMP_DIR=$BUILD_DIR/$TAR_TMP_DIR_NAME
 
-DEST_DIR=../../../lib/src
+DEST_DIR_REL=$REPO_DIR/../../lib/src
+check_dir $DEST_DIR_REL
+DEST_DIR=`(cd $DEST_DIR_REL; pwd)`
 DEST_ZIP_FILE=$DEST_DIR/webapp.zip
 
 # List of files required for serving the web app to a browser
@@ -68,6 +108,8 @@ done
 
 # Check that the destination directory where we plan to install the archive exists
 check_dir $DEST_DIR
+
+echo "---" Installing web app to $DEST_ZIP_FILE
 
 # Remove previous temp directory and build a minimal directory structure for archiving
 rm -rf $TAR_TMP_DIR

@@ -20,9 +20,10 @@ from the build directory.
 
 When work is done on the graph_app, you should install it into the main part of the repo
 so that it can be used by invocations activated using pub global. The `tools/install.sh`
-shell script will verify that the files are built and package them up into a zip file
-installed in the lib/src directory of the main project. This script should be executed
-from the tools directory.
+shell script will clean and build the web app with the ClientKit option unless the `-n`
+option is used and package the necessary run-time files into a zip file installed in the
+`lib/src` directory of the main project. The install script should be executed from the
+directory of the graph_app package or one of its direct sub-directories.
 
 If you have added any dependencies that need to be served alongside the web app, you may
 need to edit the install script as it contains a specific list of files needed to be

@@ -1,5 +1,11 @@
 ## [Unreleased versions]
 
+## [0.0.27] - 2020/07/20
+
+* tabbed view for multiple files
+* panning works with scrolling now
+* canvasKit back end now used by default
+
 ## [0.0.26] - 2020/07/15
 
 * graphTimeline can now graph any begin/event sequences in a raw timeline

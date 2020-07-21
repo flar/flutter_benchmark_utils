@@ -236,7 +236,7 @@ Future<ServedResults> serveToWebApp(
       }
     }
     if (verbose) {
-      print('[web app data server] served ${request.response.headers.contentLength} bytes: $uri');
+      print('[web app server] served ${request.response.headers.contentLength} bytes: $uri');
     }
   });
   return ServedResults('web app', 'http://localhost:${server.port}');

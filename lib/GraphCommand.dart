@@ -129,7 +129,7 @@ abstract class GraphCommand {
       }
       servedUrls.add(await serveToWebApp(results, webAppPath, verbose));
       webBuilder = buildWebApp(args[kCanvasKitOpt] as bool);
-    } else if (args[kCanvasKitOpt] as bool) {
+    } else if (!(args[kCanvasKitOpt] as bool)) {
       _usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
       return;
     } else if (args[kWebAppOpt] as bool) {
@@ -249,7 +249,7 @@ final ArgParser _argParser = ArgParser()
   ..addFlag(
     kCanvasKitOpt,
     hide: true,
-    defaultsTo: false,
+    defaultsTo: true,
     help: 'Uses CanvasKit backend for local web.',
   )
   ..addFlag(

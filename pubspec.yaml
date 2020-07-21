@@ -1,6 +1,6 @@
 name: flutter_benchmark_utils
 description: Flutter package with scripts to graph and analyze Flutter benchmark output
-version: 0.0.26
+version: 0.0.27
 author: flar
 homepage: http://github.com/flar/flutter_benchmark_utils
 

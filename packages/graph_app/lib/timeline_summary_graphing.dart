@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter/gestures.dart';
+
 import 'time_utils.dart';
 import 'timeline_summary.dart';
 
@@ -449,8 +451,10 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     setState(() => _painter = TimelineGraphPainter(timeline));
   }
 
-  void _dragDown(Offset position) {
+  bool _dragDown(Offset position) {
+    if (_painter.zoom == TimelineGraphPainter.unitRect) return false;
     _dragAnchor = _getWidgetRelativePosition(position);
+    return TimelineGraphPainter.unitRect.contains(_dragAnchor);
   }
 
   void _drag(Offset position) {
@@ -539,10 +543,10 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       onHover: (e) => _onHover(e.position),
       child: RawKeyboardListener(
         focusNode: focusNode,
-        child: GestureDetector(
+        child: ForcedPanDetector(
           onDoubleTap: _reset,
-          onPanDown: (e) => _dragDown(e.globalPosition),
-          onPanUpdate: (e) => _drag(e.globalPosition),
+          onPanDown: _dragDown,
+          onPanUpdate: _drag,
           child: theGraph,
         ),
       ),
@@ -636,4 +640,74 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
     );
   }
+}
+
+class ForcedPanDetector extends StatelessWidget {
+  ForcedPanDetector({this.child, this.onPanDown, this.onPanUpdate, this.onPanEnd = defaultEnd, this.onDoubleTap})
+      : assert(onPanDown != null),
+        assert(onPanUpdate != null);
+
+  final bool Function(Offset) onPanDown;
+  final Function(Offset) onPanUpdate;
+  final Function(Offset) onPanEnd;
+  final Function onDoubleTap;
+  final Widget child;
+
+  static void defaultEnd(Offset o) {}
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      gestures: <Type,GestureRecognizerFactory>{
+        CustomPanGestureRecognizer:
+        GestureRecognizerFactoryWithHandlers<CustomPanGestureRecognizer>(
+              () => CustomPanGestureRecognizer(this),
+              (CustomPanGestureRecognizer instance) {},
+        ),
+      },
+      child: child,
+    );
+  }
+}
+
+class CustomPanGestureRecognizer extends OneSequenceGestureRecognizer {
+  CustomPanGestureRecognizer(this._detector) : super(debugOwner: _detector);
+
+  final ForcedPanDetector _detector;
+  Duration _doubleTapTimestamp;
+
+  @override
+  void addPointer(PointerDownEvent event) {
+    if (_detector.onPanDown(event.position)) {
+      if (_doubleTapTimestamp != null && event.timeStamp - _doubleTapTimestamp < kDoubleTapTimeout) {
+        _detector.onDoubleTap();
+        _doubleTapTimestamp = null;
+        stopTrackingPointer(event.pointer);
+      } else {
+        if (_detector.onDoubleTap != null) {
+          _doubleTapTimestamp = event.timeStamp;
+        }
+        startTrackingPointer(event.pointer);
+        resolve(GestureDisposition.accepted);
+      }
+    } else {
+      stopTrackingPointer(event.pointer);
+    }
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      _detector.onPanUpdate(event.position);
+    } else if (event is PointerUpEvent) {
+      _detector.onPanEnd(event.position);
+      stopTrackingPointer(event.pointer);
+    }
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {}
+
+  @override
+  String get debugDescription => 'CustomPanRecognizer';
 }

@@ -92,12 +92,12 @@ abstract class GraphCommand {
     }
     String json = file.readAsStringSync();
     Map<String,dynamic> jsonMap = JsonDecoder().convert(json);
-    String error = validateJson(jsonMap, webClient);
-    if (error == null) {
-      return json;
+    try {
+      return validateJson(jsonMap, webClient) ?? json;
+    } catch (error) {
+      _usage('$filename is not a valid $commandName results json file: $error');
+      return null;
     }
-    _usage('$filename is not a valid $commandName results json file: $error');
-    return null;
   }
 
   Future graphMain(List<String> rawArgs) async {
@@ -206,8 +206,8 @@ abstract class GraphCommand {
   String get webAppPath => _webAppPath ??= _findWebAppPath();
   String _findWebAppPath() {
     Directory repo = new File(Platform.script.path).parent.parent;
-    Directory webapp_repo = Directory('${repo.path}/packages/graph_app');
-    return webapp_repo.path;
+    Directory webappRepo = Directory('${repo.path}/packages/graph_app');
+    return webappRepo.path;
   }
 
   Future<Process> buildWebApp(bool useCanvasKit) {

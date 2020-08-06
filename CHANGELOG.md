@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.28] - 2020/08/06
+
+* moved Timeline classes to main package for use outside of graphing utility
+
 ## [0.0.27] - 2020/07/20
 
 * tabbed view for multiple files

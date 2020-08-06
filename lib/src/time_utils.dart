@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:meta/meta.dart';
+
 class TimeVal implements Comparable<TimeVal> {
   static const TimeVal zero           = TimeVal._(0.0);
   static const TimeVal oneNanosecond  = TimeVal._(1.0);
@@ -92,7 +94,7 @@ class TimeFrame {
 
   const TimeFrame._(this.start, this.end, this.duration);
 
-  TimeFrame({this.start, TimeVal end, TimeVal duration})
+  TimeFrame({@required this.start, TimeVal end, TimeVal duration})
       : assert(start != null),
         assert((end == null) != (duration == null)),
         this.end = end == null ? start + duration : end,

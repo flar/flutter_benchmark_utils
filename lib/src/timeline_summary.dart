@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:convert';
+
+import 'package:meta/meta.dart';
+
 import 'time_utils.dart';
+
+import 'benchmark_utils.dart';
 
 class ThreadInfo {
   static const ThreadInfo build = ThreadInfo._(
@@ -21,11 +27,11 @@ class ThreadInfo {
   );
 
   const ThreadInfo._({
-    this.titleName,
-    this.keyString,
-    this.startKey,
-    this.durationKey,
-    this.eventKey,
+    @required this.titleName,
+    @required this.keyString,
+    @required this.startKey,
+    @required this.durationKey,
+    @required this.eventKey,
   });
 
   final String titleName;
@@ -45,12 +51,12 @@ class ThreadInfo {
 
 class TimelineThreadResults extends Iterable<TimeFrame> {
   TimelineThreadResults._internal({
-    this.titleName,
-    this.frames,
-    this.average,
-    this.percent90,
-    this.percent99,
-    this.worst,
+    @required this.titleName,
+    @required this.frames,
+    @required this.average,
+    @required this.percent90,
+    @required this.percent99,
+    @required this.worst,
   }) {
     assert(titleName != null);
     assert(frames != null);
@@ -60,19 +66,40 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     assert(worst != null);
   }
 
-  factory TimelineThreadResults.fromSummaryJson(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
+  static bool hasSummaryValues(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
+    try {
+      BenchmarkUtils.validateJsonEntryIsNumber(jsonMap, threadInfo.averageKey);
+      BenchmarkUtils.validateJsonEntryIsNumber(jsonMap, threadInfo.percent90Key);
+      BenchmarkUtils.validateJsonEntryIsNumber(jsonMap, threadInfo.percent99Key);
+      BenchmarkUtils.validateJsonEntryIsNumber(jsonMap, threadInfo.worstKey);
+      BenchmarkUtils.validateJsonEntryIsNumberList(jsonMap, threadInfo.startKey);
+      BenchmarkUtils.validateJsonEntryIsNumberList(jsonMap, threadInfo.durationKey);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  factory TimelineThreadResults.fromSummaryMap(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
     return TimelineThreadResults._internal(
       titleName:  threadInfo.titleName,
-      frames:     _getFrameListMicros(jsonMap[threadInfo.startKey], jsonMap[threadInfo.durationKey]),
-      average:    _getTimeVal(jsonMap[threadInfo.averageKey]),
-      percent90:  _getTimeVal(jsonMap[threadInfo.percent90Key]),
-      percent99:  _getTimeVal(jsonMap[threadInfo.percent99Key]),
-      worst:      _getTimeVal(jsonMap[threadInfo.worstKey]),
+      frames:     _getFrameListMicros(jsonMap, threadInfo.startKey, threadInfo.durationKey),
+      average:    _getTimeVal(jsonMap, threadInfo.averageKey),
+      percent90:  _getTimeVal(jsonMap, threadInfo.percent90Key),
+      percent99:  _getTimeVal(jsonMap, threadInfo.percent99Key),
+      worst:      _getTimeVal(jsonMap, threadInfo.worstKey),
     );
   }
 
-  factory TimelineThreadResults.fromEvents({List<dynamic> eventList, String titleName, String eventKey}) {
+  factory TimelineThreadResults.fromEvents({
+    @required List<dynamic> eventList,
+    @required String titleName,
+    @required String eventKey
+  }) {
     List<TimeFrame> frames = _getSortedFrameListFromEvents(eventList, eventKey);
+    if (frames.isEmpty) {
+      throw 'No $eventKey events found in trace';
+    }
     List<TimeFrame> immutableFrames = List.unmodifiable(frames);
 
     // Then sort by duration for statistics
@@ -86,6 +113,18 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
       percent99:  _percent(frames, 99).duration,
       worst:      frames.last.duration,
     );
+  }
+
+  Map<String,dynamic> _summaryMap(ThreadInfo threadInfo) {
+    TimeVal threadStart = frames.first.start;
+    return <String,dynamic>{
+      threadInfo.averageKey:   average.millis,
+      threadInfo.percent90Key: percent90.millis,
+      threadInfo.percent99Key: percent99.millis,
+      threadInfo.worstKey:     worst.millis,
+      threadInfo.startKey:     List<num>.generate(frames.length, (i) => (frames[i].start - threadStart).micros),
+      threadInfo.durationKey:  List<num>.generate(frames.length, (i) => frames[i].duration.micros),
+    };
   }
 
   final String titleName;
@@ -104,34 +143,43 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
   TimeVal get duration => end - start;
   TimeFrame get wholeRun => TimeFrame(start: start, end: end);
 
-  static TimeVal _getTimeVal(dynamic rawTimeVal) {
-    assert(rawTimeVal is num);
-    return TimeVal.fromMillis(rawTimeVal);
-  }
-
-  static List<TimeFrame> _getFrameListMicros(dynamic rawStarts, dynamic rawDurations) {
-    if (rawStarts is List<dynamic> && rawDurations is List<dynamic> &&
-        rawStarts.length == rawDurations.length)
-    {
-      return List<TimeFrame>.generate(rawStarts.length, (index) =>
-          TimeFrame(
-            start: TimeVal.fromMicros(rawStarts[index]),
-            duration: TimeVal.fromMicros(rawDurations[index]),
-          ),
-        growable: false,
-      );
+  static TimeVal _getTimeVal(Map<String,dynamic> jsonMap, String key) {
+    var rawTimeVal = jsonMap[key];
+    if (rawTimeVal is num) {
+      return TimeVal.fromMillis(rawTimeVal);
     }
-    return null;
+    throw '$key entry is not a number';
   }
 
-  static Set<String> getEventKeys(List<dynamic> eventList) {
+  static List<TimeFrame> _getFrameListMicros(Map<String,dynamic> jsonMap, String startKey, String durationKey) {
+    var rawStarts = jsonMap[startKey];
+    if (rawStarts is! List<dynamic>) {
+      throw '$startKey does not map to a List of start times';
+    }
+    var rawDurations = jsonMap[durationKey];
+    if (rawDurations is! List<dynamic>) {
+      throw '$durationKey does not map to a List of durations';
+    }
+    if (rawStarts.length != rawDurations.length) {
+      throw 'frame start times ($startKey) and frame durations ($durationKey) not the same length';
+    }
+    return List<TimeFrame>.generate(rawStarts.length, (index) =>
+        TimeFrame(
+          start: TimeVal.fromMicros(rawStarts[index]),
+          duration: TimeVal.fromMicros(rawDurations[index]),
+        ),
+      growable: false,
+    );
+  }
+
+  static List<String> getEventKeys(List<dynamic> eventList) {
     Set<String> beginKeys = <String>{};
     Set<String> keys = <String>{};
-    keys.add(ThreadInfo.build.titleName);
-    keys.add(ThreadInfo.render.titleName);
+    bool hasBuild = false;
+    bool hasRender = false;
     for (Map<String,dynamic> event in eventList) {
       String name = event['name'];
-      if (name != null && name != ThreadInfo.build.eventKey && name != ThreadInfo.render.eventKey) {
+      if (name != null) {
         switch (event['ph']) {
           case 'B':
           case 'b':
@@ -141,13 +189,23 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
           case 'e':
             if (beginKeys.contains(name)) {
               // ensures at least one "end" following at least one "begin"
-              keys.add(name);
+              if (name == ThreadInfo.build.eventKey) {
+                hasBuild = true;
+              } else if (name != ThreadInfo.render.eventKey) {
+                hasRender = true;
+              } else {
+                keys.add(name);
+              }
             }
             break;
         }
       }
     }
-    return keys;
+    return <String>[
+      if (hasBuild) ThreadInfo.build.titleName,
+      if (hasRender) ThreadInfo.render.titleName,
+      ...keys,
+    ];
   }
 
   static List<TimeFrame> _getSortedFrameListFromEvents(List<dynamic> eventList, String key) {
@@ -234,56 +292,81 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
 }
 
 class TimelineResults {
-  TimelineResults._internal(this.buildData, this.renderData, this.measurements, this._jsonMap)
+  TimelineResults._internal(this.buildData, this.renderData, this.measurements, this.isSummary, this._jsonMap)
       : assert(buildData != null),
         assert(renderData != null),
         assert(measurements != null),
+        assert(isSummary != null),
         assert(_jsonMap != null);
 
   factory TimelineResults(Map<String,dynamic> jsonMap) {
-    try {
-      var rawEvents = jsonMap['traceEvents'];
-      if (rawEvents is List) {
-        bool mapList = true;
-        for (var event in rawEvents) {
-          if (event is! Map<String,dynamic>) {
-            mapList = false;
-            print('$event is not a dynamic String map');
-            break;
-          }
-        }
-        if (mapList) {
-          return TimelineResults._internal(
-            TimelineThreadResults.fromEvents(
-              eventList: rawEvents,
-              titleName: ThreadInfo.build.titleName,
-              eventKey:  ThreadInfo.build.eventKey,
-            ),
-            TimelineThreadResults.fromEvents(
-              eventList: rawEvents,
-              titleName: ThreadInfo.render.titleName,
-              eventKey:  ThreadInfo.render.eventKey,
-            ),
-            TimelineThreadResults.getEventKeys(rawEvents),
-            jsonMap,
-          );
+    var rawEvents = jsonMap['traceEvents'];
+    if (rawEvents is List) {
+      for (var event in rawEvents) {
+        if (event is! Map<String,dynamic>) {
+          throw 'trace contains ill-formed event: $event';
         }
       }
-    } catch (e) {}
-    try {
       return TimelineResults._internal(
-        TimelineThreadResults.fromSummaryJson(jsonMap, ThreadInfo.build),
-        TimelineThreadResults.fromSummaryJson(jsonMap, ThreadInfo.render),
-        TimelineThreadResults.getEventKeys(<dynamic> []),
+        TimelineThreadResults.fromEvents(
+          eventList: rawEvents,
+          titleName: ThreadInfo.build.titleName,
+          eventKey:  ThreadInfo.build.eventKey,
+        ),
+        TimelineThreadResults.fromEvents(
+          eventList: rawEvents,
+          titleName: ThreadInfo.render.titleName,
+          eventKey:  ThreadInfo.render.eventKey,
+        ),
+        TimelineThreadResults.getEventKeys(rawEvents),
+        false,
         jsonMap,
       );
-    } catch (e) {}
-    return null;
+    }
+    return TimelineResults._internal(
+      TimelineThreadResults.fromSummaryMap(jsonMap, ThreadInfo.build),
+      TimelineThreadResults.fromSummaryMap(jsonMap, ThreadInfo.render),
+      TimelineThreadResults.getEventKeys(<dynamic> []),
+      true,
+      jsonMap,
+    );
+  }
+
+  static bool isTraceMap(Map<String,dynamic> jsonMap) {
+    var rawEvents = jsonMap['traceEvents'];
+    if (rawEvents is List) {
+      for (var event in rawEvents) {
+        if (event is! Map<String,dynamic>) {
+          return false;
+        }
+      }
+      List<String> eventKeys = TimelineThreadResults.getEventKeys(rawEvents);
+      return eventKeys.contains(ThreadInfo.build.titleName)
+          && eventKeys.contains(ThreadInfo.render.titleName);
+    }
+    return false;
+  }
+
+  static bool isSummaryMap(Map<String,dynamic> jsonMap) {
+    return TimelineThreadResults.hasSummaryValues(jsonMap, ThreadInfo.build)
+        && TimelineThreadResults.hasSummaryValues(jsonMap, ThreadInfo.render);
+  }
+
+  Map<String,dynamic> get _toSummaryMap {
+    return <String,dynamic>{
+      ...buildData._summaryMap(ThreadInfo.build),
+      ...renderData._summaryMap(ThreadInfo.render),
+    };
+  }
+
+  String get jsonSummary {
+    return JsonEncoder.withIndent(' ').convert(isSummary ? _jsonMap : _toSummaryMap);
   }
 
   final TimelineThreadResults buildData;
   final TimelineThreadResults renderData;
-  final Set<String> measurements;
+  final List<String> measurements;
+  final bool isSummary;
   final Map<String,dynamic> _jsonMap;
 
   TimelineThreadResults getResults(String measurement) {

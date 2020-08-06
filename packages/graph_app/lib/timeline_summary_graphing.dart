@@ -3,12 +3,10 @@
 // found in the LICENSE file.
 
 import 'package:flutter/gestures.dart';
-
-import 'time_utils.dart';
-import 'timeline_summary.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
 final List<Color> heatColors = [
   Colors.green,

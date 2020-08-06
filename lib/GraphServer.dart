@@ -6,8 +6,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 
-import 'package:resource/resource.dart' show Resource;
 import 'package:archive/archive.dart';
+import 'package:meta/meta.dart';
+import 'package:resource/resource.dart' show Resource;
 
 const kPackagePrefix = 'package:flutter_benchmark_utils/src/';
 const kStandardScripts = [
@@ -108,16 +109,16 @@ class _ResultsRequestHandler extends _StringRequestHandler {
   _ResultsRequestHandler(String variableName, [ GraphResult results ])
       : super(kContentTypeJs,
               'results_filename = "${results?.filename}";\n'
-              '$variableName = ${results == null ? null : results.json};');
+              '$variableName = ${results?.json};');
 }
 
 class GraphServer {
   GraphServer(
       {
-        this.graphHtmlName,
-        this.resultsScriptName,
-        this.resultsVariableName,
-        this.results,
+        @required this.graphHtmlName,
+        @required this.resultsScriptName,
+        @required this.resultsVariableName,
+        @required this.results,
       })
       : assert(graphHtmlName != null),
         assert(resultsScriptName != null),

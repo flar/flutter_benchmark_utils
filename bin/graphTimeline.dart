@@ -3,17 +3,21 @@
 // found in the LICENSE file.
 
 import 'package:flutter_benchmark_utils/GraphCommand.dart';
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
 class TimelineGraphCommand extends GraphCommand {
   TimelineGraphCommand() : super('graphTimeline');
 
   @override
   String validateJson(Map<String, dynamic> jsonMap, bool isWebClient) {
-    if (jsonMap.containsKey('traceEvents')) {
-      return isWebClient ? null : 'Raw Event Timeline is only supported by web client';
+    switch (BenchmarkUtils.getBenchmarkType(jsonMap)) {
+      case BenchmarkType.TIMELINE_SUMMARY:
+        return null;
+      case BenchmarkType.TIMELINE_TRACE:
+        return (isWebClient) ? null : TimelineResults(jsonMap).jsonSummary;
+      default:
+        throw 'Not recognized as a timeline summary or event trace';
     }
-    return validateJsonEntryIsNumberList(jsonMap, 'frame_build_times')
-        ?? validateJsonEntryIsNumberList(jsonMap, 'frame_rasterizer_times');
   }
 }
 

@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'timeline_summary.dart';
-import 'timeline_summary_graphing.dart';
-
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
+
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
+
+import 'timeline_summary_graphing.dart';
 
 void main() {
   runApp(_GraphApp());

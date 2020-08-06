@@ -82,7 +82,7 @@ ICONS=(
 ASSETS=(
     assets/FontManifest.json
     assets/AssetManifest.json
-    assets/fonts/MaterialIcons-Regular.ttf
+    assets/fonts/MaterialIcons-Regular.otf
     assets/NOTICES
 )
 

@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
-final List<Color> heatColors = [
+final List<Color> heatColors = <Color>[
   Colors.green,
   Colors.green.shade200,
   Colors.yellow.shade600,
@@ -16,7 +16,7 @@ final List<Color> heatColors = [
 ];
 
 class TimelineResultsGraphWidget extends StatefulWidget {
-  TimelineResultsGraphWidget(this.results)
+  const TimelineResultsGraphWidget(this.results)
       : assert(results != null);
 
   final TimelineResults results;
@@ -50,14 +50,16 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
   }
 
   void _addGraph(String measurement) {
-    TimelineThreadResults results = widget.results.getResults(measurement);
-    TimelineGraphWidget graph = TimelineGraphWidget(results, _closeGraph);
+    final TimelineThreadResults results = widget.results.getResults(measurement);
+    final TimelineGraphWidget graph = TimelineGraphWidget(results, _closeGraph);
     setState(() => _graphs.add(graph));
   }
 
   bool isGraphed(String measurement) {
-    for (TimelineGraphWidget graph in _graphs) {
-      if (graph.timeline.titleName == measurement) return true;
+    for (final TimelineGraphWidget graph in _graphs) {
+      if (graph.timeline.titleName == measurement) {
+        return true;
+      }
     }
     return false;
   }
@@ -65,7 +67,7 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
 
   @override
   Widget build(BuildContext context) {
-    List<String> remainingMeasurements = widget.results.measurements.where(isNotGraphed);
+    final Iterable<String> remainingMeasurements = widget.results.measurements.where(isNotGraphed);
     return Stack(
       children: <Widget>[
         Container(
@@ -77,11 +79,11 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
               children: <Widget>[
                 for (TimelineGraphWidget graph in _graphs)
                   Container(
-                    margin: EdgeInsets.only(top: 20, bottom: 20),
+                    margin: const EdgeInsets.only(top: 20, bottom: 20),
                     child: graph,
                   ),
                 Container(
-                  margin: EdgeInsets.only(top: 20, bottom: 20),
+                  margin: const EdgeInsets.only(top: 20, bottom: 20),
                   child: TimelineGraphAdditionalWidget(remainingMeasurements, _addGraph),
                 ),
               ],
@@ -94,27 +96,26 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
 }
 
 class TimelineGraphAdditionalWidget extends StatelessWidget {
-  TimelineGraphAdditionalWidget(this.measurements, this.addCallback);
+  const TimelineGraphAdditionalWidget(this.measurements, this.addCallback);
 
-  final List<String> measurements;
+  final Iterable<String> measurements;
   final Function(String) addCallback;
 
   @override
   Widget build(BuildContext context) {
-    Column w = Column(
+    return Column(
       children: <Widget>[
-        DropdownButton(
-          icon: Icon(Icons.add),
+        DropdownButton<String>(
+          icon: const Icon(Icons.add),
           onChanged: addCallback,
-          hint: Text('Add a new graph'),
-          items: [
+          hint: const Text('Add a new graph'),
+          items: <DropdownMenuItem<String>>[
             for (String measurement in measurements)
-              DropdownMenuItem(value: measurement, child: Text(measurement)),
+              DropdownMenuItem<String>(value: measurement, child: Text(measurement)),
           ],
         ),
       ],
     );
-    return w;
   }
 }
 
@@ -129,8 +130,8 @@ abstract class TimelineAxisPainter extends CustomPainter {
       : ticks = makeTicks(range, _optimalTickUnit(range, units, minTicks, maxTicks));
 
   static List<TimeVal> makeTicks(TimeFrame range, TimeVal tickUnit) {
-    double minTick = (range.start / tickUnit).floorToDouble() + 1;
-    double maxTick = (range.end   / tickUnit).ceilToDouble()  - 1;
+    final double minTick = (range.start / tickUnit).floorToDouble() + 1;
+    final double maxTick = (range.end   / tickUnit).ceilToDouble()  - 1;
     return <TimeVal>[
       for (double t = minTick; t <= maxTick; t++)
         tickUnit * t,
@@ -138,22 +139,26 @@ abstract class TimelineAxisPainter extends CustomPainter {
   }
 
   static TimeVal _optimalTickUnit(TimeFrame range, TimeVal proposedUnit, int minTicks, int maxTicks) {
-    int numTicks = _numTicks(range, proposedUnit);
+    final int numTicks = _numTicks(range, proposedUnit);
     if (numTicks < minTicks) {
       return _optimalTickUnit(range, proposedUnit * 0.10, minTicks, maxTicks);
     }
     if (numTicks <= maxTicks) {
       return proposedUnit;
     }
-    if (_numTicks(range, proposedUnit * 2) <= maxTicks) return proposedUnit * 2;
-    if (_numTicks(range, proposedUnit * 5) <= maxTicks) return proposedUnit * 5;
+    if (_numTicks(range, proposedUnit * 2) <= maxTicks) {
+      return proposedUnit * 2;
+    }
+    if (_numTicks(range, proposedUnit * 5) <= maxTicks) {
+      return proposedUnit * 5;
+    }
     return _optimalTickUnit(range, proposedUnit * 10, minTicks, maxTicks);
   }
 
   static int _numTicks(TimeFrame range, TimeVal proposedUnit) {
-    int minTick = (range.start / proposedUnit).floor() + 1;
-    int maxTick = (range.end   / proposedUnit).ceil()  - 1;
-    return (maxTick - minTick + 1);
+    final int minTick = (range.start / proposedUnit).floor() + 1;
+    final int maxTick = (range.end   / proposedUnit).ceil()  - 1;
+    return maxTick - minTick + 1;
   }
 
   final TimeFrame range;
@@ -163,13 +168,13 @@ abstract class TimelineAxisPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    Paint paint = Paint()
+    final Paint paint = Paint()
       ..color = Colors.black;
-    TextStyle style = TextStyle(
+    const TextStyle style = TextStyle(
       color: Colors.black,
     );
-    for (TimeVal t in ticks) {
-      double fraction = range.getFraction(t);
+    for (final TimeVal t in ticks) {
+      final double fraction = range.getFraction(t);
       double x, y;
       if (horizontal) {
         x = fraction * size.width;
@@ -180,9 +185,9 @@ abstract class TimelineAxisPainter extends CustomPainter {
         y = (1.0 - fraction) * size.height;
         canvas.drawLine(Offset(5, y), Offset(10, y), paint);
       }
-      String label = (t / units).toString();
-      TextSpan span = new TextSpan(text: label, style: style);
-      TextPainter textPainter = TextPainter(text: span);
+      final String label = (t / units).toString();
+      final TextSpan span = TextSpan(text: label, style: style);
+      final TextPainter textPainter = TextPainter(text: span);
       textPainter.layout();
       if (horizontal) {
         x -= textPainter.width / 2.0;
@@ -224,10 +229,10 @@ class TimelineVAxisPainter extends TimelineAxisPainter {
 }
 
 class TimelineGraphPainter extends CustomPainter {
-  static const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
-
   TimelineGraphPainter(this.timeline, [this.zoom = unitRect, this.showInactiveRegions = false])
       : run = timeline.wholeRun;
+
+  static const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
 
   final TimelineThreadResults timeline;
   final TimeFrame run;
@@ -247,7 +252,7 @@ class TimelineGraphPainter extends CustomPainter {
     double startX = getX(f.start, view);
     double endX = getX(f.end, view);
     if (minWidth > 0) {
-      double pad = minWidth - (endX - startX);
+      final double pad = minWidth - (endX - startX);
       if (pad > 0) {
         startX -= pad / 2;
         endX += pad / 2;
@@ -264,7 +269,7 @@ class TimelineGraphPainter extends CustomPainter {
   void drawLine(Canvas canvas, Size size, Paint paint, double y, Color heatColor) {
     paint.color = heatColor.withAlpha(128);
     paint.strokeWidth = 1.0;
-    double dashLen = 10.0;
+    const double dashLen = 10.0;
     for (double x = 0; x < size.width; x += dashLen + dashLen) {
       canvas.drawLine(Offset(x, y), Offset(x + dashLen, y), paint);
     }
@@ -272,22 +277,22 @@ class TimelineGraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    Rect view = Offset.zero & size;
+    final Rect view = Offset.zero & size;
     canvas.clipRect(view);
 
     canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
     canvas.translate(-zoom.left * size.width, -zoom.top * size.height);
-    double minWidth = zoom.width;
+    final double minWidth = zoom.width;
 
-    Paint paint = Paint();
+    final Paint paint = Paint();
 
     // Draw gaps first (if enabled)
     if (showInactiveRegions) {
       paint.style = PaintingStyle.fill;
       paint.color = Colors.grey.shade200;
       TimeFrame prevFrame = timeline.first;
-      for (TimeFrame frame in timeline.skip(1)) {
-        TimeFrame gap = frame.gapFrameSince(prevFrame);
+      for (final TimeFrame frame in timeline.skip(1)) {
+        final TimeFrame gap = frame.gapFrameSince(prevFrame);
         if (gap.duration.millis > 16) {
           canvas.drawRect(getMaxRect(gap, view), paint);
         }
@@ -303,7 +308,7 @@ class TimelineGraphPainter extends CustomPainter {
 
     // Finally frame times over lines
     paint.style = PaintingStyle.fill;
-    for (TimeFrame frame in timeline) {
+    for (final TimeFrame frame in timeline) {
       paint.color = heatColors[timeline.heatIndex(frame.duration)];
       canvas.drawRect(getRect(frame, view, minWidth), paint);
     }
@@ -340,7 +345,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     super.initState();
 
     focusNode = FocusNode(
-      onKey: (node, event) => _onKey(event),
+      onKey: (FocusNode node, RawKeyEvent event) => _onKey(event),
     );
   }
 
@@ -358,11 +363,11 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 
   void _setHoverEvent(TimeFrame newHoverFrame) {
     if (_hoverFrame != newHoverFrame) {
-      TimeFrame e = newHoverFrame - timeline.wholeRun.start;
-      String start = e.start.stringSeconds();
-      String end = e.end.stringSeconds();
-      String dur = e.duration.stringMillis();
-      String label = timeline.labelFor(e.duration);
+      final TimeFrame e = newHoverFrame - timeline.wholeRun.start;
+      final String start = e.start.stringSeconds();
+      final String end = e.end.stringSeconds();
+      final String dur = e.duration.stringMillis();
+      final String label = timeline.labelFor(e.duration);
       setState(() {
         _hoverFrame = newHoverFrame;
         _hoverString = 'frame[$start => $end] = $dur ($label)';
@@ -371,13 +376,13 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   Offset _getWidgetRelativePosition(Offset position) {
-    RenderBox box = _mouseKey.currentContext.findRenderObject();
-    Offset mousePosition = box.globalToLocal(position);
+    final RenderBox box = _mouseKey.currentContext.findRenderObject() as RenderBox;
+    final Offset mousePosition = box.globalToLocal(position);
     return Offset(mousePosition.dx / box.size.width, mousePosition.dy / box.size.height);
   }
 
   Offset _getViewRelativePosition(Offset position) {
-    Offset widgetRelative = _getWidgetRelativePosition(position);
+    final Offset widgetRelative = _getWidgetRelativePosition(position);
     return Offset(
       _painter.zoom.left + widgetRelative.dx * _painter.zoom.width,
       _painter.zoom.top  + widgetRelative.dy * _painter.zoom.height,
@@ -426,10 +431,10 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   void _onHover(Offset position) {
-    Offset relative = _getViewRelativePosition(position);
+    final Offset relative = _getViewRelativePosition(position);
     _zoomAnchor = relative;
-    TimeVal t = timeline.wholeRun.elapsedTime(relative.dx);
-    TimeFrame e = timeline.eventNear(t);
+    final TimeVal t = timeline.wholeRun.elapsedTime(relative.dx);
+    final TimeFrame e = timeline.eventNear(t);
     _setHoverEvent(e);
   }
 
@@ -450,14 +455,16 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   bool _dragDown(Offset position) {
-    if (_painter.zoom == TimelineGraphPainter.unitRect) return false;
+    if (_painter.zoom == TimelineGraphPainter.unitRect) {
+      return false;
+    }
     _dragAnchor = _getWidgetRelativePosition(position);
     return TimelineGraphPainter.unitRect.contains(_dragAnchor);
   }
 
   void _drag(Offset position) {
-    Offset newAnchor = _getWidgetRelativePosition(position);
-    Offset relative = _dragAnchor - newAnchor;
+    final Offset newAnchor = _getWidgetRelativePosition(position);
+    final Offset relative = _dragAnchor - newAnchor;
     _dragAnchor = newAnchor;
     _move(relative.dx, relative.dy);
   }
@@ -513,7 +520,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 
   @override
   Widget build(BuildContext context) {
-    Widget theGraph = CustomPaint(
+    final Widget theGraph = CustomPaint(
       isComplex: true,
       willChange: false,
       child: Container(
@@ -522,23 +529,23 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
       painter: _painter,
     );
-    Widget timeAxis = CustomPaint(
+    final Widget timeAxis = CustomPaint(
       isComplex: true,
       willChange: false,
       child: Container(height: 30),
       painter: _painter.timePainter,
     );
-    Widget durationAxis = CustomPaint(
+    final Widget durationAxis = CustomPaint(
       isComplex: true,
       willChange: false,
       child: Container(height: 200),
       painter: _painter.durationPainter,
     );
 
-    Widget annotatedGraph = MouseRegion(
+    final Widget annotatedGraph = MouseRegion(
       onEnter: (_) => focusNode.requestFocus(),
       onExit: (_) => focusNode.unfocus(),
-      onHover: (e) => _onHover(e.position),
+      onHover: (PointerHoverEvent e) => _onHover(e.position),
       child: RawKeyboardListener(
         focusNode: focusNode,
         child: ForcedPanDetector(
@@ -552,14 +559,14 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 
     Row _makeLegendItem(String name, TimeVal value, Color color) {
       return Row(
-        children: [
+        children: <Widget>[
           Container(alignment: Alignment.center, color: color, width: 12, height: 12,),
           Container(width: 10),
           Text('$name: ${value.stringMillis()}'),
         ],
       );
     }
-    Row legend = Row(
+    final Row legend = Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: <Widget>[
         _makeLegendItem('average value',   timeline.average,   heatColors[0]),
@@ -576,9 +583,9 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Text('Frame ${timeline.titleName} Times', style: TextStyle(fontSize: 24),),
+              Text('Frame ${timeline.titleName} Times', style: const TextStyle(fontSize: 24),),
               IconButton(
-                icon: Icon(Icons.close),
+                icon: const Icon(Icons.close),
                 onPressed: () => widget.closeCallback(widget),
               ),
             ]
@@ -599,9 +606,9 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
           //  |  legend1...legend4  |   |
           //  +---------------------+---+
           Table(
-            columnWidths: <int, TableColumnWidth>{
+            columnWidths: const <int, TableColumnWidth>{
               0: FractionColumnWidth(0.8),
-              1: FixedColumnWidth(50),
+              1: FixedColumnWidth(50.0),
             },
             children: <TableRow>[
               // Main graph and vertical axis aligned to right of graph
@@ -641,8 +648,15 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 }
 
 class ForcedPanDetector extends StatelessWidget {
-  ForcedPanDetector({this.child, this.onPanDown, this.onPanUpdate, this.onPanEnd = defaultEnd, this.onDoubleTap})
-      : assert(onPanDown != null),
+  const ForcedPanDetector({
+    @required this.child,
+    @required this.onPanDown,
+    @required this.onPanUpdate,
+    this.onPanEnd = defaultEnd,
+    this.onDoubleTap,
+  })
+      : assert(child != null),
+        assert(onPanDown != null),
         assert(onPanUpdate != null);
 
   final bool Function(Offset) onPanDown;

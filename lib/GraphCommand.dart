@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 
 import 'package:open_url/open_url.dart';
 import 'package:args/args.dart';
@@ -24,12 +24,12 @@ abstract class GraphCommand {
   bool verbose;
 
   String validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
-    dynamic val = map[key];
+    final dynamic val = map[key];
     if (val is List<num> || val is List<int> || val is List<double>) {
       return null;
     }
     if (val is List) {
-      for (var subVal in val) {
+      for (final dynamic subVal in val) {
         if (subVal is! num) {
           return 'not all values in $outerKey[$key] are num: $subVal';
         }
@@ -40,7 +40,7 @@ abstract class GraphCommand {
   }
 
   String validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key) {
-    dynamic val = jsonMap[key];
+    final dynamic val = jsonMap[key];
     if (val == null) {
       return 'missing $key';
     }
@@ -54,9 +54,9 @@ abstract class GraphCommand {
       return null;
     }
     if (val is Map<String,List<dynamic>> || val is Map<String,dynamic>) {
-      Map<String,dynamic> map = val;
+      final Map<String,dynamic> map = val as Map<String,dynamic>;
       String error;
-      for (var subKey in map.keys) {
+      for (final String subKey in map.keys) {
         error ??= validateJsonEntryIsNumberList(map, subKey);
       }
       return error;
@@ -85,13 +85,13 @@ abstract class GraphCommand {
   }
 
   String _validateJsonFile(String filename, bool webClient) {
-    File file = File(filename);
+    final File file = File(filename);
     if (!file.existsSync()) {
       _usage('$filename does not exist');
       return null;
     }
-    String json = file.readAsStringSync();
-    Map<String,dynamic> jsonMap = JsonDecoder().convert(json);
+    final String json = file.readAsStringSync();
+    final Map<String,dynamic> jsonMap = const JsonDecoder().convert(json) as Map<String,dynamic>;
     try {
       return validateJson(jsonMap, webClient) ?? json;
     } catch (error) {
@@ -100,7 +100,7 @@ abstract class GraphCommand {
     }
   }
 
-  Future graphMain(List<String> rawArgs) async {
+  Future<void> graphMain(List<String> rawArgs) async {
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
@@ -110,17 +110,17 @@ abstract class GraphCommand {
     }
     verbose = args[kVerboseOpt] as bool;
 
-    List<GraphResult> results = [];
-    bool isWebClient = args[kWebAppLocalOpt] || args[kWebAppOpt];
-    for (String arg in args.rest) {
-      String json = _validateJsonFile(arg, isWebClient);
+    final List<GraphResult> results = <GraphResult>[];
+    final bool isWebClient = args[kWebAppLocalOpt] as bool || args[kWebAppOpt] as bool;
+    for (final String arg in args.rest) {
+      final String json = _validateJsonFile(arg, isWebClient);
       if (json == null) {
         return;
       }
       results.add(GraphResult(arg, json));
     }
 
-    List<ServedResults> servedUrls = [];
+    final List<ServedResults> servedUrls = <ServedResults>[];
     Future<Process> webBuilder;
     if (args[kWebAppLocalOpt] as bool) {
       if (args[kWebAppOpt] as bool) {
@@ -135,16 +135,16 @@ abstract class GraphCommand {
     } else if (args[kWebAppOpt] as bool) {
       servedUrls.add(await serveToWebApp(results, null, verbose));
     } else {
-      if (results.length == 0) {
+      if (results.isEmpty) {
         servedUrls.add(await launchHtml(null));
       }
-      for (GraphResult result in results) {
+      for (final GraphResult result in results) {
         servedUrls.add(await launchHtml(result));
       }
     }
 
     if (webBuilder != null) {
-      await webBuilder.then((process) => process.exitCode.then((code) {
+      await webBuilder.then((Process process) => process.exitCode.then((int code) {
         if (code != 0) {
           print('');
           print('Compile failed with exit code $code');
@@ -162,10 +162,10 @@ abstract class GraphCommand {
     stdin.echoMode = false;
     stdin.lineMode = false;
     stdin.listen((List<int> chars) async {
-      for (int char in chars) {
+      for (final int char in chars) {
         if (char == 'q'.codeUnitAt(0)) {
           if (webBuilder != null) {
-            await webBuilder.then((process) => process.kill());
+            await webBuilder.then((Process process) => process.kill());
           }
           exit(0);
         } else if (char == 'l'.codeUnitAt(0)) {
@@ -175,14 +175,14 @@ abstract class GraphCommand {
     });
   }
 
-  webOut(String origin, String output) {
-    for (String line in output.split('\n')) {
+  void webOut(String origin, String output) {
+    for (final String line in output.split('\n')) {
       print('[$origin]: $line');
     }
   }
 
-  printAndLaunchUrls(List<ServedResults> servedUrls, bool show, bool launch) async {
-    for (var result in servedUrls) {
+  Future<void> printAndLaunchUrls(List<ServedResults> servedUrls, bool show, bool launch) async {
+    for (final ServedResults result in servedUrls) {
       if (show) {
         print('Serving ${result.name} at ${result.url}');
       }
@@ -193,7 +193,7 @@ abstract class GraphCommand {
   }
 
   Future<ServedResults> launchHtml(GraphResult results) async {
-    GraphServer server = GraphServer(
+    final GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
       resultsVariableName: '${commandName}_data',
@@ -205,13 +205,13 @@ abstract class GraphCommand {
   String _webAppPath;
   String get webAppPath => _webAppPath ??= _findWebAppPath();
   String _findWebAppPath() {
-    Directory repo = new File(Platform.script.path).parent.parent;
-    Directory webappRepo = Directory('${repo.path}/packages/graph_app');
+    final Directory repo = File(Platform.script.path).parent.parent;
+    final Directory webappRepo = Directory('${repo.path}/packages/graph_app');
     return webappRepo.path;
   }
 
   Future<Process> buildWebApp(bool useCanvasKit) {
-    List<String> args = [ 'build', 'web' ];
+    final List<String> args = <String>[ 'build', 'web' ];
     if (useCanvasKit) {
       args.add('--dart-define=FLUTTER_WEB_USE_SKIA=true');
     }
@@ -220,9 +220,9 @@ abstract class GraphCommand {
     }
     return Process.start('flutter', args, workingDirectory: webAppPath).then((Process process) {
       if (verbose) {
-        process.stdout.transform(utf8.decoder).listen((chunk) => webOut('web app stdout', chunk));
+        process.stdout.transform(utf8.decoder).listen((String chunk) => webOut('web app stdout', chunk));
       }
-      process.stderr.transform(utf8.decoder).listen((chunk) => webOut('web app stderr', chunk));
+      process.stderr.transform(utf8.decoder).listen((String chunk) => webOut('web app stderr', chunk));
       return process;
     });
   }

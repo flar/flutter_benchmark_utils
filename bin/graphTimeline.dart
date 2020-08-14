@@ -14,7 +14,7 @@ class TimelineGraphCommand extends GraphCommand {
       case BenchmarkType.TIMELINE_SUMMARY:
         return null;
       case BenchmarkType.TIMELINE_TRACE:
-        return (isWebClient) ? null : TimelineResults(jsonMap).jsonSummary;
+        return isWebClient ? null : TimelineResults(jsonMap).jsonSummary;
       default:
         throw 'Not recognized as a timeline summary or event trace';
     }
@@ -22,6 +22,6 @@ class TimelineGraphCommand extends GraphCommand {
 }
 
 void main(List<String> rawArgs) {
-  GraphCommand command = TimelineGraphCommand();
+  final GraphCommand command = TimelineGraphCommand();
   command.graphMain(rawArgs);
 }

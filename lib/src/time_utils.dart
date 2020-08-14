@@ -4,7 +4,15 @@
 
 import 'package:meta/meta.dart';
 
+@immutable
 class TimeVal implements Comparable<TimeVal> {
+  const TimeVal._(double nanos) : _nanos = nanos;
+
+  TimeVal.fromNanos(num nanos)     : _nanos = nanos.toDouble();
+  TimeVal.fromMicros(num micros)   : _nanos = micros.toDouble() * 1000.0;
+  TimeVal.fromMillis(num millis)   : _nanos = millis.toDouble() * 1000.0 * 1000.0;
+  TimeVal.fromSeconds(num seconds) : _nanos = seconds.toDouble() * 1000.0 * 1000.0 * 1000.0;
+
   static const TimeVal zero           = TimeVal._(0.0);
   static const TimeVal oneNanosecond  = TimeVal._(1.0);
   static const TimeVal oneMicrosecond = TimeVal._(1000.0);
@@ -13,13 +21,6 @@ class TimeVal implements Comparable<TimeVal> {
 
   static TimeVal max(TimeVal a, TimeVal b) { return a > b ? a : b; }
   static TimeVal min(TimeVal a, TimeVal b) { return a < b ? a : b; }
-
-  const TimeVal._(double nanos) : this._nanos = nanos;
-
-  TimeVal.fromNanos(num nanos)     : this._nanos = nanos.toDouble();
-  TimeVal.fromMicros(num micros)   : this._nanos = micros * 1000.0;
-  TimeVal.fromMillis(num millis)   : this._nanos = millis * 1000.0 * 1000.0;
-  TimeVal.fromSeconds(num seconds) : this._nanos = seconds * 1000.0 * 1000.0 * 1000.0;
 
   final double _nanos;
 
@@ -34,24 +35,24 @@ class TimeVal implements Comparable<TimeVal> {
   String stringNanos([int digits = 3])   => '${nanos.toStringAsFixed(digits)}ns';
 
   @override int get hashCode => _nanos.hashCode;
-  @override bool operator == (dynamic t) => t is TimeVal && this._nanos == t._nanos;
+  @override bool operator == (dynamic other) => other is TimeVal && _nanos == other._nanos;
 
-  bool operator <  (TimeVal t) => this._nanos <  t._nanos;
-  bool operator <= (TimeVal t) => this._nanos <= t._nanos;
-  bool operator >= (TimeVal t) => this._nanos >= t._nanos;
-  bool operator >  (TimeVal t) => this._nanos >  t._nanos;
+  bool operator <  (TimeVal t) => _nanos <  t._nanos;
+  bool operator <= (TimeVal t) => _nanos <= t._nanos;
+  bool operator >= (TimeVal t) => _nanos >= t._nanos;
+  bool operator >  (TimeVal t) => _nanos >  t._nanos;
 
-  bool get isNegative    => this._nanos < 0;
-  bool get isNonPositive => this._nanos <= 0;
-  bool get isZero        => this._nanos == 0;
-  bool get isNonNegative => this._nanos >= 0;
-  bool get isPositive    => this._nanos > 0;
+  bool get isNegative    => _nanos < 0;
+  bool get isNonPositive => _nanos <= 0;
+  bool get isZero        => _nanos == 0;
+  bool get isNonNegative => _nanos >= 0;
+  bool get isPositive    => _nanos > 0;
 
-  TimeVal operator + (TimeVal t) => TimeVal._(this._nanos + t._nanos);
-  TimeVal operator - (TimeVal t) => TimeVal._(this._nanos - t._nanos);
+  TimeVal operator + (TimeVal t) => TimeVal._(_nanos + t._nanos);
+  TimeVal operator - (TimeVal t) => TimeVal._(_nanos - t._nanos);
 
-  double  operator / (TimeVal t) => this._nanos / t._nanos;
-  TimeVal operator * (double s)  => TimeVal._(this._nanos * s);
+  double  operator / (TimeVal t) => _nanos / t._nanos;
+  TimeVal operator * (double s)  => TimeVal._(_nanos * s);
 
   @override int compareTo(TimeVal other) => _nanos.compareTo(other._nanos);
 
@@ -69,7 +70,18 @@ class TimeVal implements Comparable<TimeVal> {
   }
 }
 
+@immutable
 class TimeFrame {
+  TimeFrame({@required this.start, TimeVal end, TimeVal duration})
+      : assert(start != null),
+        assert((end == null) != (duration == null)),
+        end = end ?? start + duration,
+        duration = duration ?? end - start,
+        assert(duration.isNonNegative),
+        assert(start + duration == end);
+
+  const TimeFrame._(this.start, this.end, this.duration);
+
   static const TimeFrame zero = TimeFrame._(TimeVal.zero, TimeVal.zero, TimeVal.zero);
 
   static TimeVal gapTime(TimeFrame a, TimeFrame b) {
@@ -92,23 +104,17 @@ class TimeFrame {
     }
   }
 
-  const TimeFrame._(this.start, this.end, this.duration);
-
-  TimeFrame({@required this.start, TimeVal end, TimeVal duration})
-      : assert(start != null),
-        assert((end == null) != (duration == null)),
-        this.end = end == null ? start + duration : end,
-        this.duration = duration == null ? end - start : duration,
-        assert(duration.isNonNegative),
-        assert(start + duration == end);
-
   final TimeVal start;
   final TimeVal end;
   final TimeVal duration;
 
   TimeVal elapsedTime(double fraction) {
-    if (fraction <= 0) return start;
-    if (fraction <  1) return start + (duration * fraction);
+    if (fraction <= 0) {
+      return start;
+    }
+    if (fraction <  1) {
+      return start + (duration * fraction);
+    }
     return end;
   }
 
@@ -117,16 +123,16 @@ class TimeFrame {
   bool contains(TimeVal t) => t >= start && t < end;
 
   TimeVal gapTimeUntil(TimeFrame f) => f.gapTimeSince(this);
-  TimeVal gapTimeSince(TimeFrame f) => f.end < this.start
-      ? f.end - this.start
+  TimeVal gapTimeSince(TimeFrame f) => f.end < start
+      ? f.end - start
       : TimeVal.zero;
 
   TimeFrame gapFrameUntil(TimeFrame f) => f.gapFrameSince(this);
-  TimeFrame gapFrameSince(TimeFrame f) => f.end < this.start
-      ? TimeFrame(start: f.end, end: this.start)
+  TimeFrame gapFrameSince(TimeFrame f) => f.end < start
+      ? TimeFrame(start: f.end, end: start)
       : TimeFrame.zero;
 
-  TimeFrame operator - (TimeVal t) => TimeFrame._(this.start - t, this.end - t, this.duration);
+  TimeFrame operator - (TimeVal t) => TimeFrame._(start - t, end - t, duration);
 
   static int startOrder   (TimeFrame a, TimeFrame b) => a.start   .compareTo(b.start);
   static int endOrder     (TimeFrame a, TimeFrame b) => a.end     .compareTo(b.end);
@@ -137,8 +143,8 @@ class TimeFrame {
   static int reverseDurationOrder(TimeFrame a, TimeFrame b) => b.duration.compareTo(a.duration);
 
   @override int get hashCode => (start.hashCode + 17) * 23 + end.hashCode;
-  @override bool operator == (dynamic t) =>
-      (t is TimeFrame && this.start == t.start && this.end == t.end);
+  @override bool operator == (dynamic other) =>
+      other is TimeFrame && start == other.start && end == other.end;
 
   @override
   String toString() {

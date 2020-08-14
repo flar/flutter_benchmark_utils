@@ -20,6 +20,6 @@ class ABGraphCommand extends GraphCommand {
 }
 
 void main(List<String> rawArgs) {
-  GraphCommand command = ABGraphCommand();
+  final GraphCommand command = ABGraphCommand();
   command.graphMain(rawArgs);
 }

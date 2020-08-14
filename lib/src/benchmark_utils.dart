@@ -12,19 +12,19 @@ enum BenchmarkType {
 
 class BenchmarkUtils {
   static void validateJsonEntryIsNumber(Map<String,dynamic> map, String key) {
-    dynamic val = map[key];
+    final dynamic val = map[key];
     if (val is! num) {
       throw '$key is not a number: $val';
     }
   }
 
   static void validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
-    dynamic val = map[key];
+    final dynamic val = map[key];
     if (val is List<num> || val is List<int> || val is List<double>) {
       return;
     }
     if (val is List) {
-      for (var subVal in val) {
+      for (final dynamic subVal in val) {
         if (subVal is! num) {
           throw 'not all values in $outerKey[$key] are num: $subVal';
         }
@@ -35,7 +35,7 @@ class BenchmarkUtils {
   }
 
   static void validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key) {
-    dynamic val = jsonMap[key];
+    final dynamic val = jsonMap[key];
     if (val == null) {
       throw 'missing $key';
     }
@@ -45,8 +45,8 @@ class BenchmarkUtils {
       return;
     }
     if (val is Map<String,List<dynamic>> || val is Map<String,dynamic>) {
-      Map<String,dynamic> map = val;
-      for (var subKey in map.keys) {
+      final Map<String,dynamic> map = val as Map<String,dynamic>;
+      for (final String subKey in map.keys) {
         validateJsonEntryIsNumberList(map, subKey);
       }
     }

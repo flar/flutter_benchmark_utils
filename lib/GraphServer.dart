@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 
 import 'package:archive/archive.dart';
 import 'package:meta/meta.dart';
 import 'package:resource/resource.dart' show Resource;
 
-const kPackagePrefix = 'package:flutter_benchmark_utils/src/';
-const kStandardScripts = [
+const String kPackagePrefix = 'package:flutter_benchmark_utils/src/';
+const List<String> kStandardScripts = <String>[
   '/crc-png.js',
   '/base64-data-converter.js',
   '/png-utils.js',
@@ -34,7 +34,7 @@ ContentType typeFor(String uri) {
 }
 
 Future<Archive> _loadWebAppArchive() async {
-  Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
+  const Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
   return ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
 }
 
@@ -53,11 +53,12 @@ class GraphResult {
 }
 
 abstract class _RequestHandler {
-  Future handle(HttpResponse response, String uri);
+  Future<void> handle(HttpResponse response, String uri);
 }
 
 class _IgnoreRequestHandler extends _RequestHandler {
-  Future handle(HttpResponse response, String uri) async {
+  @override
+  Future<void> handle(HttpResponse response, String uri) async {
     response.statusCode = HttpStatus.notFound;
     await response.close();
   }
@@ -68,7 +69,8 @@ class _DefaultRequestHandler extends _FileRequestHandler {
 
   final String defaultFile;
 
-  Future handle(HttpResponse response, String uri) {
+  @override
+  Future<void> handle(HttpResponse response, String uri) {
     return super.handle(response, defaultFile);
   }
 }
@@ -79,13 +81,18 @@ class _FileRequestHandler extends _RequestHandler {
   final String packagePrefix;
 
   ContentType _typeFor(String uri) {
-    if (uri.endsWith('.html')) return ContentType.html;
-    if (uri.endsWith('.js')) return kContentTypeJs;
+    if (uri.endsWith('.html')) {
+      return ContentType.html;
+    }
+    if (uri.endsWith('.js')) {
+      return kContentTypeJs;
+    }
     return ContentType.binary;
   }
 
-  Future handle(HttpResponse response, String uri) async {
-    Resource fileResource = Resource('$packagePrefix$uri');
+  @override
+  Future<void> handle(HttpResponse response, String uri) async {
+    final Resource fileResource = Resource('$packagePrefix$uri');
     response.headers.contentType = _typeFor(uri);
     response.write(await fileResource.readAsString());
     await response.close();
@@ -98,7 +105,8 @@ class _StringRequestHandler extends _RequestHandler {
   final ContentType contentType;
   final String content;
 
-  Future handle(HttpResponse response, String uri) async {
+  @override
+  Future<void> handle(HttpResponse response, String uri) async {
     response.headers.contentType = contentType;
     response.write(content);
     await response.close();
@@ -130,7 +138,7 @@ class GraphServer {
       '/favicon.ico': _IgnoreRequestHandler(),
       graphHtmlName: _FileRequestHandler(kPackagePrefix),
       resultsScriptName: _ResultsRequestHandler(resultsVariableName, results),
-      for (var script in kStandardScripts)
+      for (String script in kStandardScripts)
         script: _FileRequestHandler(kPackagePrefix),
     };
   }
@@ -144,13 +152,13 @@ class GraphServer {
   Map<String, _RequestHandler> get responseMap => _responseMap;
 
   Future<ServedResults> initWebServer() async {
-    var webServer = await HttpServer.bind(
+    final HttpServer webServer = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
     );
 
-    webServer.listen((request) async {
-      _RequestHandler handler = responseMap[request.uri.toString()];
+    webServer.listen((HttpRequest request) async {
+      final _RequestHandler handler = responseMap[request.uri.toString()];
       if (handler != null) {
         await handler.handle(request.response, request.uri.toString());
       } else {
@@ -160,7 +168,7 @@ class GraphServer {
       }
     });
 
-    String serverUrl = 'http://localhost:${webServer.port}';
+    final String serverUrl = 'http://localhost:${webServer.port}';
     return ServedResults(results == null ? 'page' : results.filename, serverUrl);
   }
 }
@@ -171,8 +179,8 @@ Future<ServedResults> serveToWebApp(
     bool verbose,
     ) async
 {
-  Map<String,GraphResult> resultMap = {};
-  for (GraphResult result in results) {
+  final Map<String,GraphResult> resultMap = <String,GraphResult>{};
+  for (final GraphResult result in results) {
     if (resultMap.containsKey(result.filename)) {
       if (resultMap[result.filename].json == result.json) {
         stderr.writeln('Ignoring duplicate results added for ${result.filename}');
@@ -184,29 +192,29 @@ Future<ServedResults> serveToWebApp(
       resultMap[result.filename] = result;
     }
   }
-  HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  var handler;
+  final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  bool Function(HttpResponse, String) handler;
   if (webAppPath != null) {
     handler = (HttpResponse response, String uri) {
-      File f = File('$webAppPath/build/web$uri');
+      final File f = File('$webAppPath/build/web$uri');
       if (!f.existsSync()) {
         return false;
       }
       response.headers.contentType = typeFor(uri);
       response.headers.contentLength = f.lengthSync();
-      response.addStream(f.openRead()).then((_) => response.close());
+      response.addStream(f.openRead()).then<void>((void _) => response.close());
       return true;
     };
   } else {
-    Archive webAppArchive = await _loadWebAppArchive();
+    final Archive webAppArchive = await _loadWebAppArchive();
     handler = (HttpResponse response, String uri) {
-      ArchiveFile f = webAppArchive.findFile('webapp$uri');
+      final ArchiveFile f = webAppArchive.findFile('webapp$uri');
       if (f == null) {
         return false;
       }
       response.headers.contentType = typeFor(uri);
       response.headers.contentLength = f.size;
-      response.add(f.content);
+      response.add(f.content as List<int>);
       response.close();
       return true;
     };
@@ -215,14 +223,14 @@ Future<ServedResults> serveToWebApp(
     request.response.headers.set('access-control-allow-origin', '*');
     String uri = request.uri.toString();
     if (uri == '/list') {
-      List<String> filenames = [ ...resultMap.keys ];
-      String filenameJson = JsonEncoder.withIndent('  ').convert(filenames);
+      final List<String> filenames = <String>[ ...resultMap.keys ];
+      final String filenameJson = const JsonEncoder.withIndent('  ').convert(filenames);
       request.response.headers.contentType = ContentType.json;
       request.response.headers.contentLength = filenameJson.length;
       request.response.write(filenameJson);
       request.response.close();
     } else if (uri.startsWith('/result?')) {
-      String key = uri.substring(8);
+      final String key = uri.substring(8);
       if (resultMap.containsKey(key)) {
         request.response.headers.contentType = ContentType.json;
         request.response.headers.contentLength = resultMap[key].json.length;
@@ -230,7 +238,9 @@ Future<ServedResults> serveToWebApp(
         request.response.close();
       }
     } else {
-      if (uri == '/') uri = '/index.html';
+      if (uri == '/') {
+        uri = '/index.html';
+      }
       if (!handler(request.response, uri)) {
         request.response.statusCode = HttpStatus.notFound;
         request.response.close();

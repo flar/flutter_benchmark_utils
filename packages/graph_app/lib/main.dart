@@ -31,10 +31,10 @@ class _TimelineGraphPage extends StatefulWidget {
   State createState() => _TimelineGraphPageState();
 }
 
-void performGet(String url, void onValue(http.Response value), void onError(String msg)) async {
+Future<void> performGet(String url, void onValue(http.Response value), void onError(String msg)) async {
   await http.get(url)
       .then(onValue)
-      .catchError((error) => onError('Error contacting results server: $error'));
+      .catchError((dynamic error) => onError('Error contacting results server: $error'));
 }
 
 class _GraphTab {
@@ -72,9 +72,9 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
     setMessage('Loading list of results...');
     performGet('/list', (http.Response response) {
       if (response.statusCode == 200) {
-        dynamic json = JsonDecoder().convert(response.body);
-        for (String key in json) {
-          addKey(key);
+        final dynamic json = const JsonDecoder().convert(response.body);
+        for (final dynamic key in json) {
+          addKey(key as String);
         }
         if (_tabs.isEmpty) {
           setMessage('No results to load');
@@ -91,15 +91,15 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
       length: _tabs.length,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('Timeline Graphing Page'),
+          title: const Text('Timeline Graphing Page'),
           centerTitle: true,
           bottom: TabBar(
             isScrollable: true,
-            tabs: [ ..._tabs.map((tab) => Text(tab.name)) ],
+            tabs: <Widget>[ ..._tabs.map((_GraphTab tab) => Text(tab.name)) ],
           ),
         ),
         body: _message != null ? Text(_message) : TabBarView(
-          children: [ ..._tabs.map((tab) => tab.graph) ],
+          children: <Widget>[ ..._tabs.map((_GraphTab tab) => tab.graph) ],
         ),
       ),
     );
@@ -107,7 +107,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
 }
 
 class _TimelineLoaderPage extends StatefulWidget {
-  _TimelineLoaderPage(this.pageKey);
+  const _TimelineLoaderPage(this.pageKey);
 
   final String pageKey;
 
@@ -142,7 +142,8 @@ class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with Automatic
     setMessage('Loading results from $key...');
     performGet('/result?$key', (http.Response response) {
       if (response.statusCode == 200) {
-        TimelineResults results = TimelineResults(JsonDecoder().convert(response.body));
+        final dynamic decoded = const JsonDecoder().convert(response.body);
+        final TimelineResults results = TimelineResults(decoded as Map<String,dynamic>);
         if (results != null) {
           setResults(results);
         } else {

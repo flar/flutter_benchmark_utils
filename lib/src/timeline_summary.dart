@@ -49,7 +49,38 @@ class ThreadInfo {
   String get worstKey     => _measurementKey('worst');
 }
 
-class TimelineThreadResults extends Iterable<TimeFrame> {
+abstract class GraphableEvent extends TimeFrame implements Comparable<GraphableEvent> {
+  GraphableEvent({@required TimeVal start, TimeVal end, TimeVal duration})
+      : super(start: start, end: end, duration: duration);
+
+  double get value;
+  String get valueString;
+  String get units;
+
+  @override int compareTo(GraphableEvent other) => value.compareTo(other.value);
+}
+
+class MillisDurationEvent extends GraphableEvent {
+  MillisDurationEvent({@required TimeVal start, TimeVal end, TimeVal duration})
+      : super(start: start, end: end, duration: duration);
+
+  @override double get value => duration.millis;
+  @override String get valueString => duration.stringMillis();
+  @override String get units => 'ms';
+}
+
+class PercentUsageEvent extends GraphableEvent {
+  PercentUsageEvent({@required TimeVal measurementTime, @required this.percent})
+      : super(start: measurementTime, duration: TimeVal.fromNanos(1));
+
+  final double percent;
+
+  @override double get value => percent;
+  @override String get valueString => '${percent.toStringAsFixed(1)}%';
+  @override String get units => '%';
+}
+
+class TimelineThreadResults extends Iterable<GraphableEvent> {
   factory TimelineThreadResults.fromSummaryMap(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
     return TimelineThreadResults._internal(
       titleName:  threadInfo.titleName,
@@ -66,22 +97,22 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     @required String titleName,
     @required String eventKey
   }) {
-    final List<TimeFrame> frames = _getSortedFrameListFromEvents(eventList, eventKey);
+    final List<GraphableEvent> frames = _getSortedFrameListFromEvents(eventList, eventKey);
     if (frames.isEmpty) {
       throw 'No $eventKey events found in trace';
     }
-    final List<TimeFrame> immutableFrames = List<TimeFrame>.unmodifiable(frames);
+    final List<GraphableEvent> immutableFrames = List<GraphableEvent>.unmodifiable(frames);
 
     // Then sort by duration for statistics
-    frames.sort(TimeFrame.durationOrder);
-    final TimeVal durationSum = frames.fold(TimeVal.zero, (TimeVal prev, TimeFrame e) => prev + e.duration);
+    frames.sort();
+    final double valueSum = frames.fold(0.0, (double prev, GraphableEvent e) => prev + e.value);
     return TimelineThreadResults._internal(
       titleName:  titleName,
       frames:     immutableFrames,
-      average:    durationSum * (1.0 / frames.length),
-      percent90:  _percent(frames, 90).duration,
-      percent99:  _percent(frames, 99).duration,
-      worst:      frames.last.duration,
+      average:    valueSum * (1.0 / frames.length),
+      percent90:  _percent(frames, 90).value,
+      percent99:  _percent(frames, 99).value,
+      worst:      frames.last.value,
     );
   }
 
@@ -117,36 +148,36 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
   Map<String,dynamic> _summaryMap(ThreadInfo threadInfo) {
     final TimeVal threadStart = frames.first.start;
     return <String,dynamic>{
-      threadInfo.averageKey:   average.millis,
-      threadInfo.percent90Key: percent90.millis,
-      threadInfo.percent99Key: percent99.millis,
-      threadInfo.worstKey:     worst.millis,
+      threadInfo.averageKey:   average,
+      threadInfo.percent90Key: percent90,
+      threadInfo.percent99Key: percent99,
+      threadInfo.worstKey:     worst,
       threadInfo.startKey:     List<num>.generate(frames.length, (int i) => (frames[i].start - threadStart).micros),
       threadInfo.durationKey:  List<num>.generate(frames.length, (int i) => frames[i].duration.micros),
     };
   }
 
   final String titleName;
-  final TimeVal average;
-  final TimeVal percent90;
-  final TimeVal percent99;
-  final TimeVal worst;
-  final List<TimeFrame> frames;
+  final double average;
+  final double percent90;
+  final double percent99;
+  final double worst;
+  final List<GraphableEvent> frames;
 
   int get frameCount => frames.length;
 
   @override
-  Iterator<TimeFrame> get iterator => frames.iterator;
+  Iterator<GraphableEvent> get iterator => frames.iterator;
 
   TimeVal get start => frames.first.start;
   TimeVal get end => frames.last.end;
   TimeVal get duration => end - start;
   TimeFrame get wholeRun => TimeFrame(start: start, end: end);
 
-  static TimeVal _getTimeVal(Map<String,dynamic> jsonMap, String key) {
+  static double _getTimeVal(Map<String,dynamic> jsonMap, String key) {
     final dynamic rawTimeVal = jsonMap[key];
     if (rawTimeVal is num) {
-      return TimeVal.fromMillis(rawTimeVal);
+      return rawTimeVal.toDouble();
     }
     throw '$key entry is not a number';
   }
@@ -159,14 +190,14 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     throw '$key does not map to a List of $description';
   }
 
-  static List<TimeFrame> _getFrameListMicros(Map<String,dynamic> jsonMap, String startKey, String durationKey) {
+  static List<GraphableEvent> _getFrameListMicros(Map<String,dynamic> jsonMap, String startKey, String durationKey) {
     final List<dynamic> starts = _getList(jsonMap, startKey, 'start times');
     final List<dynamic> durations = _getList(jsonMap, durationKey, 'durations');
     if (starts.length != durations.length) {
       throw 'frame start times ($startKey) and frame durations ($durationKey) not the same length';
     }
-    return List<TimeFrame>.generate(starts.length, (int index) =>
-        TimeFrame(
+    return List<GraphableEvent>.generate(starts.length, (int index) =>
+        MillisDurationEvent(
           start: TimeVal.fromMicros(starts[index] as num),
           duration: TimeVal.fromMicros(durations[index] as num),
         ),
@@ -194,11 +225,16 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
               // ensures at least one "end" following at least one "begin"
               if (name == ThreadInfo.build.eventKey) {
                 hasBuild = true;
-              } else if (name != ThreadInfo.render.eventKey) {
+              } else if (name == ThreadInfo.render.eventKey) {
                 hasRender = true;
               } else {
                 keys.add(name);
               }
+            }
+            break;
+          case 'i':
+            if (name == 'GpuUsage' || name == 'CpuUsage') {
+              keys.add(name);
             }
             break;
         }
@@ -211,10 +247,12 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     ];
   }
 
-  static List<TimeFrame> _getSortedFrameListFromEvents(List<dynamic> eventList, String key) {
-    final List<TimeFrame> frames = <TimeFrame>[];
+  static List<GraphableEvent> _getSortedFrameListFromEvents(List<dynamic> eventList, String key) {
+    final List<GraphableEvent> frames = <GraphableEvent>[];
     TimeVal startMicros;
     bool isSorted = true;
+    final String argKey = key == 'GpuUsage' ? 'gpu_usage'
+        : key == 'CpuUsage' ? 'total_cpu_usage' : null;
     for (final dynamic rawEvent in eventList) {
       final Map<String,dynamic> event = rawEvent as Map<String,dynamic>;
       if (event['name'] == key) {
@@ -227,13 +265,33 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
           case 'e':
             if (startMicros != null) {
               final TimeVal endMicros = TimeVal.fromMicros(event['ts'] as num);
-              frames.add(TimeFrame(start: startMicros, end: endMicros));
+              frames.add(MillisDurationEvent(start: startMicros, end: endMicros));
               startMicros = null;
               if (isSorted && frames.last.start < frames[frames.length - 1].start) {
                 isSorted = false;
               }
             }
             break;
+          case 'i': {
+            print('found matching instant event');
+            final dynamic args = event['args'];
+            if (args is Map<String,dynamic>) {
+              final dynamic usage = args[argKey];
+              if (usage is String) {
+                final double usageVal = double.parse(usage);
+                final TimeVal measurementUs = TimeVal.fromMicros(event['ts'] as num);
+                frames.add(PercentUsageEvent(measurementTime: measurementUs, percent: usageVal));
+                if (isSorted && frames.last.start < frames[frames.length - 1].start) {
+                  isSorted = false;
+                }
+              } else {
+                print('usage was not a num');
+              }
+            } else {
+              print('args were not a map');
+            }
+            break;
+          }
         }
       }
     }
@@ -247,7 +305,7 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
     return list[((list.length - 1) * (percent / 100)).round()];
   }
 
-  TimeFrame _find(TimeVal t, bool strict) {
+  GraphableEvent _find(TimeVal t, bool strict) {
     TimeVal loT = start;
     TimeVal hiT = end;
     if (t < loT) {
@@ -272,7 +330,7 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
         loT = midT;
       }
     }
-    final TimeFrame loEvent = frames[lo];
+    final GraphableEvent loEvent = frames[lo];
     if (loEvent.contains(t)) {
       return loEvent;
     }
@@ -282,22 +340,22 @@ class TimelineThreadResults extends Iterable<TimeFrame> {
       if (lo >= frameCount) {
         return loEvent;
       }
-      final TimeFrame hiEvent = frames[lo + 1];
+      final GraphableEvent hiEvent = frames[lo + 1];
       return (t - loEvent.end < hiEvent.start - t) ? loEvent : hiEvent;
     }
   }
 
-  TimeFrame eventAt(TimeVal t) => _find(t, true);
-  TimeFrame eventNear(TimeVal t) => _find(t, false);
+  GraphableEvent eventAt(TimeVal t) => _find(t, true);
+  GraphableEvent eventNear(TimeVal t) => _find(t, false);
 
-  String labelFor(TimeVal t) {
+  String labelFor(double t) {
     return (t < average) ? 'Good'
         : (t < percent90) ? 'Nominal'
         : (t < percent99) ? '90th Percentile'
         : '99th Percentile';
   }
 
-  int heatIndex(TimeVal t) {
+  int heatIndex(double t) {
     return (t < average) ? 0
         : (t < percent90) ? 1
         : (t < percent99) ? 2

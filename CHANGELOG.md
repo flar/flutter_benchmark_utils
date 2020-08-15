@@ -1,5 +1,10 @@
 ## [Unreleased versions]
 
+## [0.0.29] - 2020/08/14
+
+* support for graphing CpuUsage and GpuUsage events
+* added analysis options to prepare for NNBD
+
 ## [0.0.28] - 2020/08/06
 
 * moved Timeline classes to main package for use outside of graphing utility

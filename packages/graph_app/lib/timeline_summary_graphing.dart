@@ -121,50 +121,62 @@ class TimelineGraphAdditionalWidget extends StatelessWidget {
 
 abstract class TimelineAxisPainter extends CustomPainter {
   TimelineAxisPainter({
-    this.range,
+    this.rangeMin,
+    this.rangeMax,
     this.units,
     this.horizontal,
     int minTicks,
     int maxTicks,
   })
-      : ticks = makeTicks(range, _optimalTickUnit(range, units, minTicks, maxTicks));
+      : ticks = makeTicks(rangeMin, rangeMax, _optimalTickUnit(rangeMin, rangeMax, 1.0, minTicks, maxTicks));
 
-  static List<TimeVal> makeTicks(TimeFrame range, TimeVal tickUnit) {
-    final double minTick = (range.start / tickUnit).floorToDouble() + 1;
-    final double maxTick = (range.end   / tickUnit).ceilToDouble()  - 1;
-    return <TimeVal>[
+  static List<double> makeTicks(double rangeMin, double rangeMax, double tickUnit) {
+    final double minTick = (rangeMin / tickUnit).floorToDouble() + 1;
+    final double maxTick = (rangeMax / tickUnit).ceilToDouble()  - 1;
+    return <double>[
       for (double t = minTick; t <= maxTick; t++)
         tickUnit * t,
     ];
   }
 
-  static TimeVal _optimalTickUnit(TimeFrame range, TimeVal proposedUnit, int minTicks, int maxTicks) {
-    final int numTicks = _numTicks(range, proposedUnit);
+  static double _optimalTickUnit(double rangeMin, double rangeMax, double proposedUnit, int minTicks, int maxTicks) {
+    final int numTicks = _numTicks(rangeMin, rangeMax, proposedUnit);
     if (numTicks < minTicks) {
-      return _optimalTickUnit(range, proposedUnit * 0.10, minTicks, maxTicks);
+      return _optimalTickUnit(rangeMin, rangeMax, proposedUnit * 0.10, minTicks, maxTicks);
     }
     if (numTicks <= maxTicks) {
       return proposedUnit;
     }
-    if (_numTicks(range, proposedUnit * 2) <= maxTicks) {
+    if (_numTicks(rangeMin, rangeMax, proposedUnit * 2) <= maxTicks) {
       return proposedUnit * 2;
     }
-    if (_numTicks(range, proposedUnit * 5) <= maxTicks) {
+    if (_numTicks(rangeMin, rangeMax, proposedUnit * 5) <= maxTicks) {
       return proposedUnit * 5;
     }
-    return _optimalTickUnit(range, proposedUnit * 10, minTicks, maxTicks);
+    return _optimalTickUnit(rangeMin, rangeMax, proposedUnit * 10, minTicks, maxTicks);
   }
 
-  static int _numTicks(TimeFrame range, TimeVal proposedUnit) {
-    final int minTick = (range.start / proposedUnit).floor() + 1;
-    final int maxTick = (range.end   / proposedUnit).ceil()  - 1;
+  static int _numTicks(double rangeMin, double rangeMax, double proposedUnit) {
+    final int minTick = (rangeMin / proposedUnit).floor() + 1;
+    final int maxTick = (rangeMax / proposedUnit).ceil()  - 1;
     return maxTick - minTick + 1;
   }
 
-  final TimeFrame range;
-  final TimeVal units;
+  final double rangeMin;
+  final double rangeMax;
+  final String units;
   final bool horizontal;
-  final List<TimeVal> ticks;
+  final List<double> ticks;
+
+  String _formatTick(double v) {
+    String str = v.toStringAsFixed(3);
+    if (str.contains('.')) {
+      while (str.endsWith('00')) {
+        str = str.substring(0, str.length - 1);
+      }
+    }
+    return str;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -173,8 +185,8 @@ abstract class TimelineAxisPainter extends CustomPainter {
     const TextStyle style = TextStyle(
       color: Colors.black,
     );
-    for (final TimeVal t in ticks) {
-      final double fraction = range.getFraction(t);
+    for (final double t in ticks) {
+      final double fraction = (t - rangeMin) / (rangeMax - rangeMin);
       double x, y;
       if (horizontal) {
         x = fraction * size.width;
@@ -185,7 +197,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
         y = (1.0 - fraction) * size.height;
         canvas.drawLine(Offset(5, y), Offset(10, y), paint);
       }
-      final String label = (t / units).toString();
+      final String label = '${_formatTick(t)}$units';
       final TextSpan span = TextSpan(text: label, style: style);
       final TextPainter textPainter = TextPainter(text: span);
       textPainter.layout();
@@ -204,11 +216,9 @@ abstract class TimelineAxisPainter extends CustomPainter {
 
 class TimelineHAxisPainter extends TimelineAxisPainter {
   TimelineHAxisPainter(TimelineGraphPainter graphPainter) : super(
-    range: TimeFrame(
-      start: graphPainter.run.elapsedTime(graphPainter.zoom.left),
-      end:   graphPainter.run.elapsedTime(graphPainter.zoom.right),
-    ) - graphPainter.run.start,
-    units: TimeVal.oneSecond,
+    rangeMin: graphPainter.run.duration.seconds * graphPainter.zoom.left,
+    rangeMax: graphPainter.run.duration.seconds * graphPainter.zoom.right,
+    units: 's',
     horizontal: true,
     minTicks: 10,
     maxTicks: 25,
@@ -217,11 +227,9 @@ class TimelineHAxisPainter extends TimelineAxisPainter {
 
 class TimelineVAxisPainter extends TimelineAxisPainter {
   TimelineVAxisPainter(TimelineGraphPainter graphPainter) : super(
-    range: TimeFrame(
-      start: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
-      end:   graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
-    ),
-    units: TimeVal.oneMillisecond,
+    rangeMin: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
+    rangeMax: graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
+    units: graphPainter.timeline.frames.first.units,
     horizontal: false,
     minTicks: 4,
     maxTicks: 10,
@@ -246,7 +254,7 @@ class TimelineGraphPainter extends CustomPainter {
   TimelineVAxisPainter get durationPainter => _durationPainter ??= TimelineVAxisPainter(this);
 
   double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width  * run.getFraction(t);
-  double getY(TimeVal d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
+  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
 
   Rect _getRectBar(TimeFrame f, double barY, Rect view, double minWidth) {
     double startX = getX(f.start, view);
@@ -261,8 +269,8 @@ class TimelineGraphPainter extends CustomPainter {
     return Rect.fromLTRB(startX, barY, endX, view.height);
   }
 
-  Rect getRect(TimeFrame f, Rect view, double minWidth) =>
-      _getRectBar(f, getY(f.duration, view), view, minWidth);
+  Rect getRect(GraphableEvent f, Rect view, double minWidth) =>
+      _getRectBar(f, getY(f.value, view), view, minWidth);
   Rect getMaxRect(TimeFrame f, Rect bounds) =>
       _getRectBar(f, 0, bounds, 0.0);
 
@@ -308,8 +316,8 @@ class TimelineGraphPainter extends CustomPainter {
 
     // Finally frame times over lines
     paint.style = PaintingStyle.fill;
-    for (final TimeFrame frame in timeline) {
-      paint.color = heatColors[timeline.heatIndex(frame.duration)];
+    for (final GraphableEvent frame in timeline) {
+      paint.color = heatColors[timeline.heatIndex(frame.value)];
       canvas.drawRect(getRect(frame, view, minWidth), paint);
     }
   }
@@ -358,19 +366,19 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 
   TimelineGraphPainter _painter;
   Offset _zoomAnchor;
-  TimeFrame _hoverFrame;
+  GraphableEvent _hoverFrame;
   String _hoverString;
 
-  void _setHoverEvent(TimeFrame newHoverFrame) {
+  void _setHoverEvent(GraphableEvent newHoverFrame) {
     if (_hoverFrame != newHoverFrame) {
       final TimeFrame e = newHoverFrame - timeline.wholeRun.start;
       final String start = e.start.stringSeconds();
       final String end = e.end.stringSeconds();
-      final String dur = e.duration.stringMillis();
-      final String label = timeline.labelFor(e.duration);
+      final String value = newHoverFrame.valueString;
+      final String label = timeline.labelFor(newHoverFrame.value);
       setState(() {
         _hoverFrame = newHoverFrame;
-        _hoverString = 'frame[$start => $end] = $dur ($label)';
+        _hoverString = 'frame[$start => $end] = $value ($label)';
       });
     }
   }
@@ -434,7 +442,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     final Offset relative = _getViewRelativePosition(position);
     _zoomAnchor = relative;
     final TimeVal t = timeline.wholeRun.elapsedTime(relative.dx);
-    final TimeFrame e = timeline.eventNear(t);
+    final GraphableEvent e = timeline.eventNear(t);
     _setHoverEvent(e);
   }
 
@@ -557,12 +565,12 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
     );
 
-    Row _makeLegendItem(String name, TimeVal value, Color color) {
+    Row _makeLegendItem(String name, double value, Color color) {
       return Row(
         children: <Widget>[
           Container(alignment: Alignment.center, color: color, width: 12, height: 12,),
           Container(width: 10),
-          Text('$name: ${value.stringMillis()}'),
+          Text('$name: ${value.toStringAsFixed(3)}'),
         ],
       );
     }

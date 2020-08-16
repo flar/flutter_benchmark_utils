@@ -6,8 +6,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:open_url/open_url.dart';
 import 'package:args/args.dart';
+import 'package:open_url/open_url.dart';
 
 import 'GraphServer.dart';
 
@@ -15,6 +15,7 @@ const String kLaunchOpt = 'launch';
 const String kWebAppOpt = 'web';
 const String kWebAppLocalOpt = 'web-local';
 const String kCanvasKitOpt = 'canvas-kit';
+const String kDashboardOpt = 'dashboard';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {
@@ -22,6 +23,20 @@ abstract class GraphCommand {
 
   final String commandName;
   bool verbose;
+  bool isWebClient;
+
+  void addArgOptions(ArgParser parser) {}
+
+  bool processResults(ArgResults args, List<GraphResult> results) {
+    for (final String arg in args.rest) {
+      final GraphResult result = _validateJsonFile(arg, isWebClient);
+      if (result == null) {
+        return false;
+      }
+      results.add(result);
+    }
+    return true;
+  }
 
   String validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
     final dynamic val = map[key];
@@ -71,9 +86,9 @@ abstract class GraphCommand {
     return null;
   }
 
-  String validateJson(Map<String,dynamic> jsonMap, bool webClient);
+  GraphResult validateJson(String filename, String json, Map<String,dynamic> jsonMap, bool webClient);
 
-  void _usage(String error) {
+  void usage(String error) {
     if (error != null) {
       exitCode = 1;
       stderr.writeln('');
@@ -84,53 +99,50 @@ abstract class GraphCommand {
     stderr.writeln(_argParser.usage);
   }
 
-  String _validateJsonFile(String filename, bool webClient) {
+  GraphResult _validateJsonFile(String filename, bool webClient) {
     final File file = File(filename);
     if (!file.existsSync()) {
-      _usage('$filename does not exist');
+      usage('$filename does not exist');
       return null;
     }
     final String json = file.readAsStringSync();
     final Map<String,dynamic> jsonMap = const JsonDecoder().convert(json) as Map<String,dynamic>;
     try {
-      return validateJson(jsonMap, webClient) ?? json;
+      return validateJson(filename, json, jsonMap, webClient);
     } catch (error) {
-      _usage('$filename is not a valid $commandName results json file: $error');
+      usage('$filename is not a valid $commandName results json file: $error');
       return null;
     }
   }
 
   Future<void> graphMain(List<String> rawArgs) async {
+    addArgOptions(_argParser);
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
     } on FormatException catch (error) {
-      _usage('${error.message}\n');
+      usage('${error.message}\n');
       return;
     }
     verbose = args[kVerboseOpt] as bool;
 
     final List<GraphResult> results = <GraphResult>[];
-    final bool isWebClient = args[kWebAppLocalOpt] as bool || args[kWebAppOpt] as bool;
-    for (final String arg in args.rest) {
-      final String json = _validateJsonFile(arg, isWebClient);
-      if (json == null) {
-        return;
-      }
-      results.add(GraphResult(arg, json));
+    isWebClient = args[kWebAppLocalOpt] as bool || args[kWebAppOpt] as bool;
+    if (!processResults(args, results)) {
+      return;
     }
 
     final List<ServedResults> servedUrls = <ServedResults>[];
     Future<Process> webBuilder;
     if (args[kWebAppLocalOpt] as bool) {
       if (args[kWebAppOpt] as bool) {
-        _usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
+        usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
         return;
       }
       servedUrls.add(await serveToWebApp(results, webAppPath, verbose));
       webBuilder = buildWebApp(args[kCanvasKitOpt] as bool);
     } else if (!(args[kCanvasKitOpt] as bool)) {
-      _usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
+      usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
       return;
     } else if (args[kWebAppOpt] as bool) {
       servedUrls.add(await serveToWebApp(results, null, verbose));
@@ -228,7 +240,7 @@ abstract class GraphCommand {
   }
 }
 
-/// Command-line options for the `graphAB.dart` command.
+/// Command-line options for the `graphAB.dart` and 'graphTimeline.dart' commands.
 final ArgParser _argParser = ArgParser()
   ..addFlag(
     kLaunchOpt,

@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 
+import 'package:graph_app/dashboard_graphing.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
@@ -34,7 +35,7 @@ class _TimelineGraphPage extends StatefulWidget {
 Future<void> performGet(String url, void onValue(http.Response value), void onError(String msg)) async {
   await http.get(url)
       .then(onValue)
-      .catchError((dynamic error) => onError('Error contacting results server: $error'));
+      .catchError((dynamic error) => onError('Error contacting results server for [$url]: $error'));
 }
 
 class _GraphTab {
@@ -61,10 +62,38 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
     });
   }
 
-  void addKey(String name) {
+  void addKey(String key) {
+    final int colonIndex = key.indexOf(':');
+    String name;
+    Widget graph;
+    if (colonIndex < 0) {
+      name = key;
+      graph = _TimelineLoaderPage(BenchmarkType.TIMELINE_SUMMARY, name);
+    } else {
+      final String typeName = key.substring(0, colonIndex);
+      name = key.substring(colonIndex + 1);
+      BenchmarkType type;
+      switch (typeName) {
+        case 'BenchmarkType.TIMELINE_TRACE':
+          type = BenchmarkType.TIMELINE_TRACE;
+          break;
+        case 'BenchmarkType.TIMELINE_SUMMARY':
+          type = BenchmarkType.TIMELINE_SUMMARY;
+          break;
+        case 'BenchmarkType.BENCHMARK_DASHBOARD':
+          type = BenchmarkType.BENCHMARK_DASHBOARD;
+          break;
+        case 'BenchmarkType.BENCHMARK_AB_COMPARISON':
+        default:
+          break;
+      }
+      graph = (type == null)
+          ? Text('data type $typeName not yet supported by web app')
+          : _TimelineLoaderPage(type, name);
+    }
     setState(() {
       _message = null;
-      _tabs.add(_GraphTab(name, _TimelineLoaderPage(name)));
+      _tabs.add(_GraphTab(name, graph));
     });
   }
 
@@ -107,8 +136,9 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
 }
 
 class _TimelineLoaderPage extends StatefulWidget {
-  const _TimelineLoaderPage(this.pageKey);
+  const _TimelineLoaderPage(this.pageType, this.pageKey);
 
+  final BenchmarkType pageType;
   final String pageKey;
 
   @override
@@ -132,10 +162,25 @@ class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with Automatic
     });
   }
 
-  void setResults(TimelineResults results) {
+  void setBody(Widget widget) {
     setState(() {
-      _body = RepaintBoundary(child: TimelineResultsGraphWidget(results));
+      _body = RepaintBoundary(child: widget);
     });
+  }
+
+  void setResults(Map<String,dynamic> decoded) {
+    switch (widget.pageType) {
+      case BenchmarkType.TIMELINE_TRACE:
+      case BenchmarkType.TIMELINE_SUMMARY:
+        setBody(TimelineResultsGraphWidget(TimelineResults(decoded)));
+        break;
+      case BenchmarkType.BENCHMARK_DASHBOARD:
+        setBody(DashboardGraphWidget(BenchmarkDashboard.fromJsonMap(decoded)));
+        break;
+      default:
+        setMessage('No graphing widget for ${widget.pageType}');
+        break;
+    }
   }
 
   void getResults(String key) {
@@ -143,12 +188,7 @@ class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with Automatic
     performGet('/result?$key', (http.Response response) {
       if (response.statusCode == 200) {
         final dynamic decoded = const JsonDecoder().convert(response.body);
-        final TimelineResults results = TimelineResults(decoded as Map<String,dynamic>);
-        if (results != null) {
-          setResults(results);
-        } else {
-          setMessage('Error: Results file for $key was not in a recognizable format.');
-        }
+        setResults(decoded as Map<String,dynamic>);
       } else {
         setMessage('Error: Cannot load results for $key, status = ${response.statusCode}');
       }

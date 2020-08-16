@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.30] - 2020/08/15
+
+* new tool graphDashboard will graph the benchmark data on the Flutter dashboard
+
 ## [0.0.29] - 2020/08/14
 
 * support for graphing CpuUsage and GpuUsage events

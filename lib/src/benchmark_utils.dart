@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
+
 import 'timeline_summary.dart';
 
 enum BenchmarkType {
   TIMELINE_SUMMARY,
   TIMELINE_TRACE,
   BENCHMARK_AB_COMPARISON,
+  BENCHMARK_DASHBOARD,
 }
 
 class BenchmarkUtils {
@@ -81,6 +84,11 @@ class BenchmarkUtils {
     if (_isABJson(jsonMap)) {
       return BenchmarkType.BENCHMARK_AB_COMPARISON;
     }
-    return null;
+    try {
+      BenchmarkDashboard.fromJsonMap(jsonMap);
+      return BenchmarkType.BENCHMARK_DASHBOARD;
+    } catch (e) {
+      return null;
+    }
   }
 }

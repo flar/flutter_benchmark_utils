@@ -3,16 +3,18 @@
 // found in the LICENSE file.
 
 import 'package:flutter_benchmark_utils/GraphCommand.dart';
+import 'package:flutter_benchmark_utils/GraphServer.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
 class ABGraphCommand extends GraphCommand {
   ABGraphCommand() : super('graphAB');
 
   @override
-  String validateJson(Map<String, dynamic> jsonMap, bool isWebClient) {
-    switch (BenchmarkUtils.getBenchmarkType(jsonMap)) {
+  GraphResult validateJson(String filename, String json, Map<String, dynamic> jsonMap, bool isWebClient) {
+    final BenchmarkType type = BenchmarkUtils.getBenchmarkType(jsonMap);
+    switch (type) {
       case BenchmarkType.BENCHMARK_AB_COMPARISON:
-        return null;
+        return GraphResult(type, filename, json);
       default:
         throw 'Not recognized as an A/B comparison summary';
     }

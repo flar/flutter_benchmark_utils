@@ -61,14 +61,14 @@ packages:
       path: "../.."
       relative: true
     source: path
-    version: "0.0.29"
+    version: "0.0.30"
   http:
     dependency: "direct main"
     description:
       name: http
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.12.1"
+    version: "0.12.2"
   http_parser:
     dependency: transitive
     description:

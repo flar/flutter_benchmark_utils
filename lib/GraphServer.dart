@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
+import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 import 'package:resource/resource.dart' show Resource;
 
@@ -46,10 +48,32 @@ class ServedResults {
 }
 
 class GraphResult {
-  GraphResult(this.filename, this.json);
+  GraphResult(this.type, this.filename, this._json) : _lazySource = null;
+  GraphResult.fromWebLazy(this.type, this.filename, this._lazySource);
 
+  Future<String> _lazyLoad() async {
+    print('loading lazy resource from $_lazySource');
+    try {
+      final http.Response response = await http.get(_lazySource);
+      print('done loading');
+      return response.body;
+    } catch (e) {
+      print('caught error while loading: $e');
+    }
+    return null;
+  }
+
+  final BenchmarkType type;
   final String filename;
-  final String json;
+  final String _lazySource;
+  String _json;
+
+  String get webKey => '$type:$filename';
+  Future<String> get json async => _json ??= await _lazyLoad();
+
+  bool sameSource(GraphResult other) => type == other.type &&
+      _json == other._json &&
+      _lazySource == other._lazySource;
 }
 
 abstract class _RequestHandler {
@@ -182,7 +206,7 @@ Future<ServedResults> serveToWebApp(
   final Map<String,GraphResult> resultMap = <String,GraphResult>{};
   for (final GraphResult result in results) {
     if (resultMap.containsKey(result.filename)) {
-      if (resultMap[result.filename].json == result.json) {
+      if (resultMap[result.filename].sameSource(result)) {
         stderr.writeln('Ignoring duplicate results added for ${result.filename}');
       } else {
         stderr.writeln('Conflicting results added for ${result.filename}');
@@ -219,11 +243,11 @@ Future<ServedResults> serveToWebApp(
       return true;
     };
   }
-  server.listen((HttpRequest request) {
+  server.listen((HttpRequest request) async {
     request.response.headers.set('access-control-allow-origin', '*');
     String uri = request.uri.toString();
     if (uri == '/list') {
-      final List<String> filenames = <String>[ ...resultMap.keys ];
+      final List<String> filenames = resultMap.keys.map((String key) => resultMap[key].webKey).toList();
       final String filenameJson = const JsonEncoder.withIndent('  ').convert(filenames);
       request.response.headers.contentType = ContentType.json;
       request.response.headers.contentLength = filenameJson.length;
@@ -232,9 +256,11 @@ Future<ServedResults> serveToWebApp(
     } else if (uri.startsWith('/result?')) {
       final String key = uri.substring(8);
       if (resultMap.containsKey(key)) {
+        final String content = await resultMap[key].json;
+        final List<int> encoded = request.response.encoding.encoder.convert(content);
         request.response.headers.contentType = ContentType.json;
-        request.response.headers.contentLength = resultMap[key].json.length;
-        request.response.write(resultMap[key].json);
+        request.response.headers.contentLength = encoded.length;
+        request.response.add(encoded);
         request.response.close();
       }
     } else {

@@ -3,21 +3,28 @@
 // found in the LICENSE file.
 
 import 'package:flutter_benchmark_utils/GraphCommand.dart';
+import 'package:flutter_benchmark_utils/GraphServer.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
 class TimelineGraphCommand extends GraphCommand {
   TimelineGraphCommand() : super('graphTimeline');
 
   @override
-  String validateJson(Map<String, dynamic> jsonMap, bool isWebClient) {
-    switch (BenchmarkUtils.getBenchmarkType(jsonMap)) {
+  GraphResult validateJson(String filename, String json, Map<String, dynamic> jsonMap, bool isWebClient) {
+    BenchmarkType type = BenchmarkUtils.getBenchmarkType(jsonMap);
+    switch (type) {
       case BenchmarkType.TIMELINE_SUMMARY:
-        return null;
+        break;
       case BenchmarkType.TIMELINE_TRACE:
-        return isWebClient ? null : TimelineResults(jsonMap).jsonSummary;
+        if (isWebClient) {
+          type = BenchmarkType.TIMELINE_SUMMARY;
+          json = TimelineResults(jsonMap).jsonSummary;
+        }
+        break;
       default:
         throw 'Not recognized as a timeline summary or event trace';
     }
+    return GraphResult(type, filename, json);
   }
 }
 

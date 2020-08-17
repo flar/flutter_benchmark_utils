@@ -16,7 +16,7 @@ class TimelineGraphCommand extends GraphCommand {
       case BenchmarkType.TIMELINE_SUMMARY:
         break;
       case BenchmarkType.TIMELINE_TRACE:
-        if (isWebClient) {
+        if (!isWebClient) {
           type = BenchmarkType.TIMELINE_SUMMARY;
           json = TimelineResults(jsonMap).jsonSummary;
         }

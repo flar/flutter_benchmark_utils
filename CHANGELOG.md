@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.32] - 2020/08/17
+
+* Fix test to turn a trace into a summary for the non-web client
+
 ## [0.0.31] - 2020/08/16
 
 * graphDashboard benchmark history graphing

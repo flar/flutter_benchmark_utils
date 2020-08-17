@@ -92,7 +92,7 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
   }
 
   void _addItemSetWidget(
-      List<Widget> widgets,
+      List<DashboardBenchmarkItemBase> widgets, Size size,
       String label,
       String avgLabel,
       String p90Label,
@@ -108,6 +108,7 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
       }
       widgets.add(DashboardItemSetWidget(
         label: label,
+        size: size,
         averageBenchmark: average,
         percent90Benchmark: percent90,
         percent99Benchmark: percent99,
@@ -116,15 +117,16 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
     }
   }
 
-  List<Widget> _widgets() {
-    final List<Widget> widgets = <Widget>[];
-    _addItemSetWidget(widgets,
+  List<DashboardBenchmarkItemBase> _widgets() {
+    final List<DashboardBenchmarkItemBase> widgets = <DashboardBenchmarkItemBase>[];
+    const Size size = Size(200.0, 100.0);
+    _addItemSetWidget(widgets, size,
         'Build',
         'average_frame_build_time_millis',
         '90th_percentile_frame_build_time_millis',
         '99th_percentile_frame_build_time_millis',
         'worst_frame_build_time_millis');
-    _addItemSetWidget(widgets,
+    _addItemSetWidget(widgets, size,
         'Render',
         'average_frame_rasterizer_time_millis',
         '90th_percentile_frame_rasterizer_time_millis',
@@ -132,15 +134,27 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
         'worst_frame_rasterizer_time_millis');
     for (final Benchmark benchmark in widget.benchmarks) {
       if (!benchmark.archived) {
-        widgets.add(DashboardBenchmarkItemWidget(benchmark));
+        widgets.add(DashboardBenchmarkItemWidget(benchmark, size));
       }
     }
     return widgets;
   }
 
+  void showHistory(BuildContext context, DashboardBenchmarkItemBase tile) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          child: DashboardHistoryDetailWidget(widget.taskName, tile),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final List<Widget> widgets = _widgets();
+    print('building list of tiles');
+    final List<DashboardBenchmarkItemBase> widgets = _widgets();
     const int columns = 5;
     return Column(
       children: <Widget>[
@@ -152,9 +166,16 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: <Widget>[
                   for (int c = 0; c < columns && r+c < widgets.length; c++)
-                    Container(
-                      margin: const EdgeInsets.only(left: 20, right: 20),
-                      child: widgets[r+c],
+                    Column(
+                      children: <Widget>[
+                        GestureDetector(
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 20, right: 20),
+                            child: widgets[r+c],
+                          ),
+                          onTap: () => showHistory(context, widgets[r+c]),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -163,6 +184,55 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
       ],
     );
   }
+}
+
+class DashboardHistoryDetailWidget extends StatefulWidget {
+  const DashboardHistoryDetailWidget(this.taskName, this.tile);
+
+  final String taskName;
+  final DashboardBenchmarkItemBase tile;
+
+  @override
+  State createState() => DashboardHistoryDetailState();
+}
+
+class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
+  DashboardBenchmarkItemBase history;
+
+  @override
+  void initState() {
+    super.initState();
+    getHistory();
+  }
+
+  void getHistory() {
+    print('asynchronously loading history');
+    widget.tile.makeDetail(const Size(800.0, 200.0)).then((DashboardBenchmarkItemBase value) {
+      print('got history');
+      setState(() {
+        history = value;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print('building history widget');
+    return Column(
+      children: <Widget>[
+        Text('History of ${widget.taskName}', style: const TextStyle(fontSize: 20.0),),
+        Center(
+          child: history ?? const Text('Loading history'),
+        ),
+      ],
+    );
+  }
+}
+
+abstract class DashboardBenchmarkItemBase extends StatelessWidget {
+  const DashboardBenchmarkItemBase();
+
+  Future<DashboardBenchmarkItemBase> makeDetail(Size size);
 }
 
 void _paintSeries(
@@ -174,7 +244,7 @@ void _paintSeries(
     Color colorFor(TimeSeriesValue tsv)) {
   double x = 0;
   final double dx = size.width / values.length;
-  for (final TimeSeriesValue tsv in values) {
+  for (final TimeSeriesValue tsv in values.reversed) {
     paint.color = colorFor(tsv);
     final double v = tsv.dataMissing ? worst : tsv.value;
     final double y = size.height * (1 - v / worst);
@@ -248,27 +318,28 @@ class DashboardItemPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class DashboardBenchmarkItemWidget extends StatefulWidget {
-  const DashboardBenchmarkItemWidget(this.benchmark);
+class DashboardBenchmarkItemWidget extends DashboardBenchmarkItemBase {
+  const DashboardBenchmarkItemWidget(this.benchmark, this.size);
 
   final Benchmark benchmark;
+  final Size size;
 
   @override
-  State createState() => DashboardBenchmarkItemState();
-}
+  Future<DashboardBenchmarkItemBase> makeDetail(Size size) async {
+    return DashboardBenchmarkItemWidget(await benchmark.getFullHistory(base: ''), size);
+  }
 
-class DashboardBenchmarkItemState extends State<DashboardBenchmarkItemWidget> {
   @override
   Widget build(BuildContext context) {
     return Column(
       children: <Widget>[
         CustomPaint(
-          size: const Size(200.0, 100.0),
-          painter: DashboardItemPainter(widget.benchmark),
+          size: size,
+          painter: DashboardItemPainter(benchmark),
           isComplex: true,
           willChange: false,
         ),
-        Text(widget.benchmark.descriptor.label, style: const TextStyle(fontSize: 9.0)),
+        Text(benchmark.descriptor.label, style: const TextStyle(fontSize: 9.0)),
       ],
     );
   }
@@ -280,7 +351,12 @@ class DashboardItemSetPainter extends CustomPainter {
     @required this.percent90Benchmark,
     @required this.percent99Benchmark,
     @required this.worstBenchmark,
-  }) : worst = _worstValueList(<Benchmark>[averageBenchmark, percent90Benchmark, percent99Benchmark, worstBenchmark]);
+  }) : worst = _worstValueList(<Benchmark>[
+    averageBenchmark,
+    percent90Benchmark,
+    percent99Benchmark,
+    worstBenchmark,
+  ]);
 
   final Benchmark averageBenchmark;
   final Benchmark percent90Benchmark;
@@ -306,42 +382,55 @@ class DashboardItemSetPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class DashboardItemSetWidget extends StatefulWidget {
+class DashboardItemSetWidget extends DashboardBenchmarkItemBase {
   const DashboardItemSetWidget({
-    this.label,
-    this.averageBenchmark,
-    this.percent90Benchmark,
-    this.percent99Benchmark,
-    this.worstBenchmark,
+    @required this.label,
+    @required this.size,
+    @required this.averageBenchmark,
+    @required this.percent90Benchmark,
+    @required this.percent99Benchmark,
+    @required this.worstBenchmark,
   });
 
   final String label;
+  final Size size;
   final Benchmark averageBenchmark;
   final Benchmark percent90Benchmark;
   final Benchmark percent99Benchmark;
   final Benchmark worstBenchmark;
 
   @override
-  State createState() => DashboardItemSetState();
-}
+  Future<DashboardBenchmarkItemBase> makeDetail(Size size) async {
+    final Benchmark historicalAverages  = await averageBenchmark.getFullHistory(base: '');
+    final Benchmark historicalPercent90 = await percent90Benchmark.getFullHistory(base: '');
+    final Benchmark historicalPercent99 = await percent99Benchmark.getFullHistory(base: '');
+    final Benchmark historicalWorsts    = await worstBenchmark.getFullHistory(base: '');
+    return DashboardItemSetWidget(
+      label: label,
+      size: size,
+      averageBenchmark:   historicalAverages,
+      percent90Benchmark: historicalPercent90,
+      percent99Benchmark: historicalPercent99,
+      worstBenchmark:     historicalWorsts,
+    );
+  }
 
-class DashboardItemSetState extends State<DashboardItemSetWidget> {
   @override
   Widget build(BuildContext context) {
     return Column(
       children: <Widget>[
         CustomPaint(
-          size: const Size(200.0, 100.0),
+          size: size,
           painter: DashboardItemSetPainter(
-            averageBenchmark: widget.averageBenchmark,
-            percent90Benchmark: widget.percent90Benchmark,
-            percent99Benchmark: widget.percent99Benchmark,
-            worstBenchmark: widget.worstBenchmark,
+            averageBenchmark:   averageBenchmark,
+            percent90Benchmark: percent90Benchmark,
+            percent99Benchmark: percent99Benchmark,
+            worstBenchmark:     worstBenchmark,
           ),
           isComplex: true,
           willChange: false,
         ),
-        Text(widget.label, style: const TextStyle(fontSize: 9.0)),
+        Text(label, style: const TextStyle(fontSize: 9.0)),
       ],
     );
   }

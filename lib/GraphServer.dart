@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
@@ -33,11 +32,6 @@ ContentType typeFor(String uri) {
   } else {
     return ContentType.binary;
   }
-}
-
-Future<Archive> _loadWebAppArchive() async {
-  const Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
-  return ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
 }
 
 class ServedResults {
@@ -69,7 +63,7 @@ class GraphResult {
   String _json;
 
   String get webKey => '$type:$filename';
-  Future<String> get json async => _json ??= await _lazyLoad();
+  Future<String> get json async => _json ?? await _lazyLoad();
 
   bool sameSource(GraphResult other) => type == other.type &&
       _json == other._json &&
@@ -197,12 +191,11 @@ class GraphServer {
   }
 }
 
-Future<ServedResults> serveToWebApp(
-    List<GraphResult> results,
-    String webAppPath,
-    bool verbose,
-    ) async
-{
+Future<ServedResults> serveToWebApp({
+  List<GraphResult> results,
+  Future<bool> handler(HttpResponse response, String uri),
+  bool verbose,
+}) async {
   final Map<String,GraphResult> resultMap = <String,GraphResult>{};
   for (final GraphResult result in results) {
     if (resultMap.containsKey(result.filename)) {
@@ -217,32 +210,6 @@ Future<ServedResults> serveToWebApp(
     }
   }
   final HttpServer server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  bool Function(HttpResponse, String) handler;
-  if (webAppPath != null) {
-    handler = (HttpResponse response, String uri) {
-      final File f = File('$webAppPath/build/web$uri');
-      if (!f.existsSync()) {
-        return false;
-      }
-      response.headers.contentType = typeFor(uri);
-      response.headers.contentLength = f.lengthSync();
-      response.addStream(f.openRead()).then<void>((void _) => response.close());
-      return true;
-    };
-  } else {
-    final Archive webAppArchive = await _loadWebAppArchive();
-    handler = (HttpResponse response, String uri) {
-      final ArchiveFile f = webAppArchive.findFile('webapp$uri');
-      if (f == null) {
-        return false;
-      }
-      response.headers.contentType = typeFor(uri);
-      response.headers.contentLength = f.size;
-      response.add(f.content as List<int>);
-      response.close();
-      return true;
-    };
-  }
   server.listen((HttpRequest request) async {
     request.response.headers.set('access-control-allow-origin', '*');
     String uri = request.uri.toString();
@@ -267,7 +234,7 @@ Future<ServedResults> serveToWebApp(
       if (uri == '/') {
         uri = '/index.html';
       }
-      if (!handler(request.response, uri)) {
+      if (!await handler(request.response, uri)) {
         request.response.statusCode = HttpStatus.notFound;
         request.response.close();
       }

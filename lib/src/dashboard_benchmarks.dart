@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
@@ -80,8 +81,10 @@ class TimeSeriesValue {
 
 class Benchmark {
   factory Benchmark.fromJsonMap(Map<String,dynamic> jsonMap) {
-    final TimeSeriesDescriptor descriptor =
-    TimeSeriesDescriptor.fromJsonMap(jsonMap['Timeseries'] as Map<String,dynamic>);
+    jsonMap = (jsonMap['BenchmarkData'] ?? jsonMap) as Map<String,dynamic>;
+    final TimeSeriesDescriptor descriptor = TimeSeriesDescriptor.fromJsonMap(
+      jsonMap['Timeseries'] as Map<String,dynamic>,
+    );
     final List<dynamic> valueJsonList = jsonMap['Values'] as List<dynamic>;
     final List<TimeSeriesValue> values =
     valueJsonList.map((dynamic e) => TimeSeriesValue.fromJsonMap(e as Map<String,dynamic>))
@@ -91,6 +94,9 @@ class Benchmark {
       values: values,
     );
   }
+
+  factory Benchmark.fromJsonString(String jsonBody) =>
+      Benchmark.fromJsonMap(const JsonDecoder().convert(jsonBody) as Map<String,dynamic>);
 
   Benchmark._({
     @required this.descriptor,
@@ -102,6 +108,17 @@ class Benchmark {
 
   bool get archived => descriptor.archived;
   String get task => descriptor.taskName;
+
+  Future<Benchmark> getFullHistory({String base = BenchmarkDashboard.dashboardUrlBase}) async {
+    final String url = BenchmarkDashboard.dashboardGetHistoryUrl(descriptor.key, base: base);
+    print('loading benchmark history from $url');
+    try {
+      final http.Response response = await http.get(url);
+      return Benchmark.fromJsonString(response.body);
+    } finally {
+      print('done loading');
+    }
+  }
 }
 
 class BenchmarkDashboard {
@@ -123,8 +140,12 @@ class BenchmarkDashboard {
     _byTask = byTask;
   }
 
-  static const String dashboardUrl =
-      'https://flutter-dashboard.appspot.com/api/public/get-benchmarks?branch=master';
+  static const String dashboardUrlBase =
+      'https://flutter-dashboard.appspot.com/api/public';
+  static const String dashboardGetBenchmarksUrl =
+      '$dashboardUrlBase/get-benchmarks?branch=master';
+  static String dashboardGetHistoryUrl(String key, {String base = dashboardUrlBase}) =>
+      '$base/get-timeseries-history?TimeSeriesKey=$key';
 
   static Benchmark _benchmarkFromJson(dynamic e) => Benchmark.fromJsonMap(e as Map<String,dynamic>);
 
@@ -133,9 +154,9 @@ class BenchmarkDashboard {
   }
 
   static Future<BenchmarkDashboard> loadFromAppspot() async {
-    print('loading benchmarks from $dashboardUrl');
+    print('loading benchmarks from $dashboardGetBenchmarksUrl');
     try {
-      final http.Response response = await http.get(dashboardUrl);
+      final http.Response response = await http.get(dashboardGetBenchmarksUrl);
       return BenchmarkDashboard.fromJsonString(response.body);
     } finally {
       print('done loading');

@@ -6,8 +6,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:args/args.dart';
 import 'package:open_url/open_url.dart';
+import 'package:resource/resource.dart' show Resource;
 
 import 'GraphServer.dart';
 
@@ -115,6 +117,44 @@ abstract class GraphCommand {
     }
   }
 
+  Archive _webAppArchive;
+
+  Future<Archive> _loadWebAppArchive() async {
+    if (_webAppArchive == null) {
+      const Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
+      _webAppArchive = ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
+    }
+    return _webAppArchive;
+  }
+
+  Future<bool> handleOther(HttpResponse response, String url) async {
+    return false;
+  }
+
+  Future<bool> handleWebLocal(HttpResponse response, String url) async {
+    final File f = File('$webAppPath/build/web$url');
+    if (!f.existsSync()) {
+      return handleOther(response, url);
+    }
+    response.headers.contentType = typeFor(url);
+    response.headers.contentLength = f.lengthSync();
+    response.addStream(f.openRead()).then<void>((void _) => response.close());
+    return true;
+  }
+
+  Future<bool> handleWebApp(HttpResponse response, String url) async {
+    final Archive webAppArchive = await _loadWebAppArchive();
+    final ArchiveFile f = webAppArchive.findFile('webapp$url');
+    if (f == null) {
+      return handleOther(response, url);
+    }
+    response.headers.contentType = typeFor(url);
+    response.headers.contentLength = f.size;
+    response.add(f.content as List<int>);
+    response.close();
+    return true;
+  }
+
   Future<void> graphMain(List<String> rawArgs) async {
     addArgOptions(_argParser);
     ArgResults args;
@@ -139,13 +179,13 @@ abstract class GraphCommand {
         usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
         return;
       }
-      servedUrls.add(await serveToWebApp(results, webAppPath, verbose));
+      servedUrls.add(await serveToWebApp(results: results, handler: handleWebLocal, verbose: verbose));
       webBuilder = buildWebApp(args[kCanvasKitOpt] as bool);
     } else if (!(args[kCanvasKitOpt] as bool)) {
       usage('CanvasKit back end currently only supported for --$kWebAppLocalOpt.');
       return;
     } else if (args[kWebAppOpt] as bool) {
-      servedUrls.add(await serveToWebApp(results, null, verbose));
+      servedUrls.add(await serveToWebApp(results: results, handler: handleWebApp, verbose: verbose));
     } else {
       if (results.isEmpty) {
         servedUrls.add(await launchHtml(null));

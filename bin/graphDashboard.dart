@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/args.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:flutter_benchmark_utils/GraphCommand.dart';
 import 'package:flutter_benchmark_utils/GraphServer.dart';
@@ -27,7 +31,7 @@ class DashboardGraphCommand extends GraphCommand {
         results.add(GraphResult.fromWebLazy(
             BenchmarkType.BENCHMARK_DASHBOARD,
             'flutter-dashboard.appspot.com',
-            BenchmarkDashboard.dashboardUrl));
+            BenchmarkDashboard.dashboardGetBenchmarksUrl));
       } else {
         usage('Dashboard graphing only supported when using the web client');
         return false;
@@ -47,6 +51,30 @@ class DashboardGraphCommand extends GraphCommand {
         throw '$filename not recognized as a dashboard get-benchmarks dump';
     }
     return GraphResult(type, filename, json);
+  }
+
+  @override
+  Future<bool> handleOther(HttpResponse response, String url) async {
+    if (url.startsWith('/get-timeseries-history?TimeSeriesKey=')) {
+      final String queryUrl = '${BenchmarkDashboard.dashboardUrlBase}/get-timeseries-history';
+      final Map<String, dynamic> request = <String, dynamic>{
+        'TimeSeriesKey': url.substring(38),
+      };
+      print('loading lazy resource from $queryUrl');
+      try {
+        final http.Response queryResponse = await http.post(queryUrl, body: json.encode(request));
+        final List<int> encoded = response.encoding.encoder.convert(queryResponse.body);
+        response.headers.contentType = ContentType.json;
+        response.headers.contentLength = encoded.length;
+        response.add(encoded);
+        response.close();
+        print('done loading');
+        return true;
+      } catch (e) {
+        print('caught error while loading: $e');
+      }
+    }
+    return false;
   }
 }
 

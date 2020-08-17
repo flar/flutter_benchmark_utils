@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.31] - 2020/08/16
+
+* graphDashboard benchmark history graphing
+
 ## [0.0.30] - 2020/08/15
 
 * new tool graphDashboard will graph the benchmark data on the Flutter dashboard

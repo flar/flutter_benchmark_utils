@@ -407,7 +407,6 @@ class DashboardBenchmarkItemState extends State<DashboardBenchmarkItemWidget> {
 
   @override
   Widget build(BuildContext context) {
-    print('range is ${widget.range?.value}');
     return Column(
       children: <Widget>[
         CustomPaint(
@@ -488,17 +487,17 @@ class DashboardItemSetWidget extends DashboardBenchmarkItemBase {
   @override
   Future<DashboardBenchmarkItemBase> makeDetail(
       {Size size, ValueNotifier<RangeValues> range}) async {
-    final Future<Benchmark> historicalAverages = averageBenchmark.getFullHistory(base: '');
+    final Future<Benchmark> historicalAverages  = averageBenchmark.getFullHistory(base: '');
     final Future<Benchmark> historicalPercent90 = percent90Benchmark.getFullHistory(base: '');
     final Future<Benchmark> historicalPercent99 = percent99Benchmark.getFullHistory(base: '');
-    final Future<Benchmark> historicalWorsts = worstBenchmark.getFullHistory(base: '');
+    final Future<Benchmark> historicalWorsts    = worstBenchmark.getFullHistory(base: '');
     return DashboardItemSetWidget(
       label: label,
       size: size,
-      averageBenchmark: await historicalAverages,
+      averageBenchmark:   await historicalAverages,
       percent90Benchmark: await historicalPercent90,
       percent99Benchmark: await historicalPercent99,
-      worstBenchmark: await historicalWorsts,
+      worstBenchmark:     await historicalWorsts,
       range: range,
     );
   }

@@ -214,8 +214,8 @@ abstract class TimelineAxisPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineHAxisPainter extends TimelineAxisPainter {
-  TimelineHAxisPainter(TimelineGraphPainter graphPainter) : super(
+class TimelineHAxisTimePainter extends TimelineAxisPainter {
+  TimelineHAxisTimePainter(TimelineGraphPainter graphPainter) : super(
     rangeMin: graphPainter.run.duration.seconds * graphPainter.zoom.left,
     rangeMax: graphPainter.run.duration.seconds * graphPainter.zoom.right,
     units: 's',
@@ -225,8 +225,8 @@ class TimelineHAxisPainter extends TimelineAxisPainter {
   );
 }
 
-class TimelineVAxisPainter extends TimelineAxisPainter {
-  TimelineVAxisPainter(TimelineGraphPainter graphPainter) : super(
+class TimelineVAxisDurationPainter extends TimelineAxisPainter {
+  TimelineVAxisDurationPainter(TimelinePainter graphPainter) : super(
     rangeMin: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
     rangeMax: graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
     units: graphPainter.timeline.frames.first.units,
@@ -236,25 +236,63 @@ class TimelineVAxisPainter extends TimelineAxisPainter {
   );
 }
 
-class TimelineGraphPainter extends CustomPainter {
-  TimelineGraphPainter(this.timeline, [this.zoom = unitRect, this.showInactiveRegions = false])
-      : run = timeline.wholeRun;
+class TimelineAxisPercentPainter extends TimelineAxisPainter {
+  TimelineAxisPercentPainter(Rect view, bool horizontal) : super(
+    rangeMin: 100 * (horizontal ? view.left : view.top),
+    rangeMax: 100 * (horizontal ? view.right : view.bottom),
+    units: '%',
+    horizontal: horizontal,
+    minTicks: 4,
+    maxTicks: 10,
+  );
+}
 
-  static const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
+const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
+
+abstract class TimelinePainter extends CustomPainter {
+  TimelinePainter(this.timeline, [this.zoom = unitRect]);
 
   final TimelineThreadResults timeline;
-  final TimeFrame run;
   final Rect zoom;
+
+  TimelineAxisPainter horizontalAxisPainter;
+  TimelineAxisPainter verticalAxisPainter;
+
+  TimelinePainter withZoom(Rect newZoom);
+
+  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
+}
+
+class TimelineGraphPainter extends TimelinePainter {
+  TimelineGraphPainter(TimelineThreadResults timeline, {
+    Rect zoom = unitRect,
+    this.showInactiveRegions = false,
+  })
+      : run = timeline.wholeRun,
+        super(timeline, zoom);
+
+  final TimeFrame run;
   final bool showInactiveRegions;
 
-  TimelineHAxisPainter _timePainter;
-  TimelineHAxisPainter get timePainter => _timePainter ??= TimelineHAxisPainter(this);
+  TimelineHAxisTimePainter _timePainter;
+  @override
+  TimelineAxisPainter get horizontalAxisPainter => _timePainter ??= TimelineHAxisTimePainter(this);
 
-  TimelineVAxisPainter _durationPainter;
-  TimelineVAxisPainter get durationPainter => _durationPainter ??= TimelineVAxisPainter(this);
+  TimelineVAxisDurationPainter _durationPainter;
+  @override
+  TimelineAxisPainter get verticalAxisPainter => _durationPainter ??= TimelineVAxisDurationPainter(this);
+
+  @override
+  TimelineGraphPainter withZoom(Rect newZoom) =>
+      TimelineGraphPainter(timeline,
+        zoom: newZoom ?? unitRect,
+        showInactiveRegions: showInactiveRegions,
+      );
 
   double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width  * run.getFraction(t);
-  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
 
   Rect _getRectBar(TimeFrame f, double barY, Rect view, double minWidth) {
     double startX = getX(f.start, view);
@@ -326,6 +364,64 @@ class TimelineGraphPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
+class TimelineDistributionPainter extends TimelinePainter {
+  TimelineDistributionPainter(TimelineThreadResults timeline, {
+    Rect zoom = unitRect,
+  })
+      : run = timeline.wholeRun,
+        indices = List<int>.generate(timeline.frames.length, (int index) => index),
+        super(timeline, zoom) {
+    indices.sort((int a, int b) {
+      return timeline.frames[a].value.compareTo(timeline.frames[b].value);
+    });
+  }
+
+  final TimeFrame run;
+  final List<int> indices;
+
+  TimelineAxisPercentPainter _timePainter;
+  @override
+  TimelineAxisPainter get horizontalAxisPainter =>
+      _timePainter ??= TimelineAxisPercentPainter(zoom, true);
+
+  TimelineVAxisDurationPainter _durationPainter;
+  @override
+  TimelineAxisPainter get verticalAxisPainter => _durationPainter ??= TimelineVAxisDurationPainter(this);
+
+  @override
+  TimelineDistributionPainter withZoom(Rect newZoom) =>
+      TimelineDistributionPainter(timeline,
+        zoom: newZoom ?? unitRect,
+      );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect view = Offset.zero & size;
+    canvas.clipRect(view);
+
+    canvas.translate(0, size.height);
+    canvas.scale(size.width / indices.length, -size.height / timeline.worst);
+    // coordinates now go from BL(0, 0) to TR(#indices, worst)
+
+    canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
+    canvas.translate(-zoom.left * indices.length, (zoom.bottom - 1) * timeline.worst);
+
+    final Paint paint = Paint();
+
+    final int i0 = (zoom.left * indices.length).floor();
+    final int i1 = (zoom.right * indices.length).ceil();
+    for (int i = i0; i < i1; i++) {
+      final double value = timeline.frames[indices[i]].value;
+      paint.color = heatColors[timeline.heatIndex(value)];
+      final double x = i.toDouble();
+      canvas.drawRect(Rect.fromLTRB(x, 0, x+1, value), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
+}
+
 class TimelineGraphWidget extends StatefulWidget {
   TimelineGraphWidget(this.timeline, this.closeCallback) : super(key: ObjectKey(timeline));
 
@@ -339,6 +435,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   TimelineGraphWidgetState(this.timeline)
       : _mouseKey = GlobalKey(),
         _imageKey = GlobalKey(),
+        _distribution = false,
         _painter = TimelineGraphPainter(timeline),
         _hoverString = '';
 
@@ -347,6 +444,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   final GlobalKey _imageKey;
   FocusNode focusNode;
   Offset _dragAnchor;
+  bool _distribution;
 
   @override
   void initState() {
@@ -364,7 +462,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     super.dispose();
   }
 
-  TimelineGraphPainter _painter;
+  TimelinePainter _painter;
   Offset _zoomAnchor;
   GraphableEvent _hoverFrame;
   String _hoverString;
@@ -446,28 +544,39 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     _setHoverEvent(e);
   }
 
+  void _setDistribution(bool newDistribution) {
+    setState(() {
+      _distribution = newDistribution;
+      _painter = _distribution
+          ? TimelineDistributionPainter(timeline)
+          : TimelineGraphPainter(timeline);
+    });
+  }
+
+  void _setZoom(Rect newZoom) {
+    setState(() {
+      _painter = _painter.withZoom(_keepInside(newZoom, unitRect));
+    });
+  }
+
   void _zoom(Offset relative, double scale) {
-    Rect zoom = _scaleRectAround(_painter.zoom, relative, Size(scale, scale));
-    zoom = _keepInside(zoom, TimelineGraphPainter.unitRect);
-    setState(() => _painter = TimelineGraphPainter(timeline, zoom));
+    _setZoom(_scaleRectAround(_painter.zoom, relative, Size(scale, scale)));
   }
 
   void _move(double dx, double dy) {
-    Rect view = _painter.zoom.translate(_painter.zoom.width * dx, _painter.zoom.height * dy);
-    view = _keepInside(view, TimelineGraphPainter.unitRect);
-    setState(() => _painter = TimelineGraphPainter(timeline, view));
+    _setZoom(_painter.zoom.translate(_painter.zoom.width * dx, _painter.zoom.height * dy));
   }
 
   void _reset() {
-    setState(() => _painter = TimelineGraphPainter(timeline));
+    _setZoom(unitRect);
   }
 
   bool _dragDown(Offset position) {
-    if (_painter.zoom == TimelineGraphPainter.unitRect) {
+    if (_painter.zoom == unitRect) {
       return false;
     }
     _dragAnchor = _getWidgetRelativePosition(position);
-    return TimelineGraphPainter.unitRect.contains(_dragAnchor);
+    return unitRect.contains(_dragAnchor);
   }
 
   void _drag(Offset position) {
@@ -537,17 +646,17 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
       painter: _painter,
     );
-    final Widget timeAxis = CustomPaint(
+    final Widget horizontalAxis = CustomPaint(
       isComplex: true,
       willChange: false,
       child: Container(height: 30),
-      painter: _painter.timePainter,
+      painter: _painter.horizontalAxisPainter,
     );
-    final Widget durationAxis = CustomPaint(
+    final Widget verticalAxis = CustomPaint(
       isComplex: true,
       willChange: false,
       child: Container(height: 200),
-      painter: _painter.durationPainter,
+      painter: _painter.verticalAxisPainter,
     );
 
     final Widget annotatedGraph = MouseRegion(
@@ -596,6 +705,11 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
                 icon: const Icon(Icons.close),
                 onPressed: () => widget.closeCallback(widget),
               ),
+              Checkbox(
+                value: _distribution,
+                onChanged: (bool value) => _setDistribution(value),
+              ),
+              const Text('Distribution style graph'),
             ]
           ),
           Text(_hoverString),
@@ -623,13 +737,13 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
               TableRow(
                 children: <Widget>[
                   annotatedGraph,
-                  durationAxis,
+                  verticalAxis,
                 ],
               ),
               // Horizontal axis aligned below graph
               TableRow(
                 children: <Widget>[
-                  timeAxis,
+                  horizontalAxis,
                   Container(),
                 ],
               ),

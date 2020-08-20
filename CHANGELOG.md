@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.34] - 2020/08/19
+
+* Distribution graphs for timelines
+
 ## [0.0.33] - 2020/08/17
 
 * Scrollable dashboard histories

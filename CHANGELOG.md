@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.35] - 2020/08/21
+
+* Handle 'X' type "complete" trace events as used in older timelines
+
 ## [0.0.34] - 2020/08/19
 
 * Distribution graphs for timelines

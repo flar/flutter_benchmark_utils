@@ -232,6 +232,15 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
               }
             }
             break;
+          case 'X':
+            if (name == ThreadInfo.build.eventKey) {
+              hasBuild = true;
+            } else if (name == ThreadInfo.render.eventKey) {
+              hasRender = true;
+            } else {
+              keys.add(name);
+            }
+            break;
           case 'i':
             if (name == 'GpuUsage' || name == 'CpuUsage') {
               keys.add(name);
@@ -270,6 +279,14 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
               if (isSorted && frames.last.start < frames[frames.length - 1].start) {
                 isSorted = false;
               }
+            }
+            break;
+          case 'X':
+            final TimeVal completeStartMicros = TimeVal.fromMicros(event['ts'] as num);
+            final TimeVal completeDurationMicros = TimeVal.fromMicros(event['dur'] as num);
+            frames.add(MillisDurationEvent(start: completeStartMicros, duration: completeDurationMicros));
+            if (isSorted && frames.last.start < frames[frames.length - 1].start) {
+              isSorted = false;
             }
             break;
           case 'i': {

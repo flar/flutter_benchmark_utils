@@ -12,6 +12,8 @@ import 'package:flutter_benchmark_utils/GraphCommand.dart';
 import 'package:flutter_benchmark_utils/GraphServer.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
+const String kDashboardOpt = 'dashboard';
+
 class DashboardGraphCommand extends GraphCommand {
   DashboardGraphCommand() : super('graphDashboard');
 

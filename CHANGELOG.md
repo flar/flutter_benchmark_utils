@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.36] - 2020/08/24
+
+* More ways to filter dashboard entries
+
 ## [0.0.35] - 2020/08/21
 
 * Handle 'X' type "complete" trace events as used in older timelines

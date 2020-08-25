@@ -17,7 +17,6 @@ const String kLaunchOpt = 'launch';
 const String kWebAppOpt = 'web';
 const String kWebAppLocalOpt = 'web-local';
 const String kCanvasKitOpt = 'canvas-kit';
-const String kDashboardOpt = 'dashboard';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {

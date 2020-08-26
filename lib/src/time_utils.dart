@@ -105,6 +105,8 @@ class TimeVal implements Comparable<TimeVal> {
   double get micros  => nanos  / 1000.0;
   double get nanos   => _nanos;
 
+  DateTime get asDateTime => DateTime.fromMicrosecondsSinceEpoch(micros.round());
+
   String stringSeconds([int digits = 3]) => '${seconds.toStringAsFixed(digits)}s';
   String stringMillis([int digits = 3])  => '${millis.toStringAsFixed(digits)}ms';
   String stringMicros([int digits = 3])  => '${micros.toStringAsFixed(digits)}us';

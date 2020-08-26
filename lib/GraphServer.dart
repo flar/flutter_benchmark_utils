@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
+import 'package:open_url/open_url.dart';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 import 'package:resource/resource.dart' show Resource;
@@ -230,6 +231,11 @@ Future<ServedResults> serveToWebApp({
         request.response.add(encoded);
         request.response.close();
       }
+    } else if (uri.startsWith('/launchUrl?url=')) {
+      final String url = Uri.decodeComponent(uri.substring(15));
+      openUrl(url);
+      request.response.headers.contentLength = 0;
+      request.response.close();
     } else {
       if (uri == '/') {
         uri = '/index.html';

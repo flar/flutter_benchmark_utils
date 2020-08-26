@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.37] - 2020/08/26
+
+* Display/navigate individual timeline series values in tiles and history popup
+
 ## [0.0.36] - 2020/08/24
 
 * More ways to filter dashboard entries

@@ -5,11 +5,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_benchmark_utils/benchmark_data.dart';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
-
-import 'time_utils.dart';
 
 class TimeSeriesDescriptor {
   factory TimeSeriesDescriptor.fromJsonMap(Map<String,dynamic> jsonMap) {
@@ -59,7 +56,7 @@ class TimeSeriesValue {
   factory TimeSeriesValue.fromJsonMap(Map<String,dynamic> jsonMap) => TimeSeriesValue._(
     dataMissing:     jsonMap['DataMissing'] as bool,
     value:           jsonMap['Value'] as double,
-    createTimestamp: TimeVal.fromSeconds(jsonMap['Value'] as num),
+    createTimestamp: DateTime.fromMillisecondsSinceEpoch(jsonMap['CreateTimestamp'] as int),
     taskKey:         jsonMap['TaskKey'] as String,
     revision:        jsonMap['Revision'] as String,
   );
@@ -74,9 +71,12 @@ class TimeSeriesValue {
 
   final bool dataMissing;
   final double value;
-  final TimeVal createTimestamp;
+  final DateTime createTimestamp;
   final String taskKey;
   final String revision;
+
+  @override
+  String toString() => dataMissing ? 'N/A' : '${value.toStringAsFixed(1)}ms';
 }
 
 class Benchmark {
@@ -92,6 +92,11 @@ class Benchmark {
     return Benchmark._(
       descriptor: descriptor,
       values: values,
+      worst: values.fold(0.0, (double previous, TimeSeriesValue tsv) {
+        if (tsv.value > previous)
+          return tsv.value;
+        return previous;
+      }),
     );
   }
 
@@ -101,10 +106,12 @@ class Benchmark {
   Benchmark._({
     @required this.descriptor,
     @required this.values,
+    @required this.worst,
   });
 
   final TimeSeriesDescriptor descriptor;
   final List<TimeSeriesValue> values;
+  final double worst;
 
   bool get archived => descriptor.archived;
   String get task => descriptor.taskName;

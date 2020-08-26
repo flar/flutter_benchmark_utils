@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
+import 'input_utils.dart';
+
 final List<Color> heatColors = <Color>[
   Colors.green,
   Colors.green.shade200,
@@ -767,81 +769,4 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
     );
   }
-}
-
-class ForcedPanDetector extends StatelessWidget {
-  const ForcedPanDetector({
-    @required this.child,
-    @required this.onPanDown,
-    @required this.onPanUpdate,
-    this.onPanEnd = defaultEnd,
-    this.onDoubleTap,
-  })
-      : assert(child != null),
-        assert(onPanDown != null),
-        assert(onPanUpdate != null);
-
-  final bool Function(Offset) onPanDown;
-  final Function(Offset) onPanUpdate;
-  final Function(Offset) onPanEnd;
-  final Function onDoubleTap;
-  final Widget child;
-
-  static void defaultEnd(Offset o) {}
-
-  @override
-  Widget build(BuildContext context) {
-    return RawGestureDetector(
-      gestures: <Type,GestureRecognizerFactory>{
-        CustomPanGestureRecognizer:
-        GestureRecognizerFactoryWithHandlers<CustomPanGestureRecognizer>(
-              () => CustomPanGestureRecognizer(this),
-              (CustomPanGestureRecognizer instance) {},
-        ),
-      },
-      child: child,
-    );
-  }
-}
-
-class CustomPanGestureRecognizer extends OneSequenceGestureRecognizer {
-  CustomPanGestureRecognizer(this._detector) : super(debugOwner: _detector);
-
-  final ForcedPanDetector _detector;
-  Duration _doubleTapTimestamp;
-
-  @override
-  void addPointer(PointerDownEvent event) {
-    if (_detector.onPanDown(event.position)) {
-      if (_doubleTapTimestamp != null && event.timeStamp - _doubleTapTimestamp < kDoubleTapTimeout) {
-        _detector.onDoubleTap();
-        _doubleTapTimestamp = null;
-        stopTrackingPointer(event.pointer);
-      } else {
-        if (_detector.onDoubleTap != null) {
-          _doubleTapTimestamp = event.timeStamp;
-        }
-        startTrackingPointer(event.pointer);
-        resolve(GestureDisposition.accepted);
-      }
-    } else {
-      stopTrackingPointer(event.pointer);
-    }
-  }
-
-  @override
-  void handleEvent(PointerEvent event) {
-    if (event is PointerMoveEvent) {
-      _detector.onPanUpdate(event.position);
-    } else if (event is PointerUpEvent) {
-      _detector.onPanEnd(event.position);
-      stopTrackingPointer(event.pointer);
-    }
-  }
-
-  @override
-  void didStopTrackingLastPointer(int pointer) {}
-
-  @override
-  String get debugDescription => 'CustomPanRecognizer';
 }

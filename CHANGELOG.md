@@ -1,5 +1,11 @@
 ## [Unreleased versions]
 
+## [0.0.38] - 2020/08/31
+
+* graphDashboard: Separate sliders for moving or resizing the history window
+* graphDashboard: Restored annotations for Revision/Creation Date to Build/Render overlay graphs
+* graphDashboard and graphTimeline: Default to --web
+
 ## [0.0.37] - 2020/08/26
 
 * Display/navigate individual timeline series values in tiles and history popup

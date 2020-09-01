@@ -20,13 +20,47 @@ const String kCanvasKitOpt = 'canvas-kit';
 const String kVerboseOpt = 'verbose';
 
 abstract class GraphCommand {
-  GraphCommand(this.commandName);
+  GraphCommand(this.commandName, { this.webClientDefault = false });
 
   final String commandName;
+  final bool webClientDefault;
   bool verbose;
   bool isWebClient;
 
-  void addArgOptions(ArgParser parser) {}
+  ArgParser _argParser;
+
+  ArgParser makeArgOptions() {
+    /// Common Command-line options for the `graphAB.dart` and 'graphTimeline.dart' commands.
+    return _argParser = ArgParser()
+      ..addFlag(
+        kLaunchOpt,
+        defaultsTo: false,
+        help: 'Automatically launches the graphing URL in the system default browser.',
+      )
+      ..addFlag(
+        kWebAppOpt,
+        defaultsTo: webClientDefault,
+        help: 'Use a Dart Web App to graph the results.',
+      )
+      ..addFlag(
+        kWebAppLocalOpt,
+        hide: true,
+        defaultsTo: false,
+        help: 'Runs the web app from the web app package directory for debugging.',
+      )
+      ..addFlag(
+        kCanvasKitOpt,
+        hide: true,
+        defaultsTo: true,
+        help: 'Uses CanvasKit backend for local web.',
+      )
+      ..addFlag(
+        kVerboseOpt,
+        abbr: 'v',
+        defaultsTo: false,
+        help: 'Verbose output.',
+      );
+  }
 
   bool processResults(ArgResults args, List<GraphResult> results) {
     for (final String arg in args.rest) {
@@ -155,7 +189,7 @@ abstract class GraphCommand {
   }
 
   Future<void> graphMain(List<String> rawArgs) async {
-    addArgOptions(_argParser);
+    makeArgOptions();
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
@@ -174,7 +208,7 @@ abstract class GraphCommand {
     final List<ServedResults> servedUrls = <ServedResults>[];
     Future<Process> webBuilder;
     if (args[kWebAppLocalOpt] as bool) {
-      if (args[kWebAppOpt] as bool) {
+      if (args[kWebAppOpt] as bool && !webClientDefault) {
         usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
         return;
       }
@@ -278,34 +312,3 @@ abstract class GraphCommand {
     });
   }
 }
-
-/// Command-line options for the `graphAB.dart` and 'graphTimeline.dart' commands.
-final ArgParser _argParser = ArgParser()
-  ..addFlag(
-    kLaunchOpt,
-    defaultsTo: false,
-    help: 'Automatically launches the graphing URL in the system default browser.',
-  )
-  ..addFlag(
-    kWebAppOpt,
-    defaultsTo: false,
-    help: 'Use a Dart Web App to graph the results.',
-  )
-  ..addFlag(
-    kWebAppLocalOpt,
-    hide: true,
-    defaultsTo: false,
-    help: 'Runs the web app from the web app package directory for debugging.',
-  )
-  ..addFlag(
-    kCanvasKitOpt,
-    hide: true,
-    defaultsTo: true,
-    help: 'Uses CanvasKit backend for local web.',
-  )
-  ..addFlag(
-    kVerboseOpt,
-    abbr: 'v',
-    defaultsTo: false,
-    help: 'Verbose output.',
-  );

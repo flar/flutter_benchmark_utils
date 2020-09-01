@@ -23,6 +23,8 @@ pub global activate -sgit http://github.com/flar/flutter_benchmark_utils
 
 # Run
 
+## graphAB
+
 Run an AB benchmark using the benchmark tools in the Flutter dev/devicelab directory,
 and then:
 ```shell
@@ -45,6 +47,8 @@ default browser.
 
 The executable will continue to run and host the URLs until you type `q` to quit it.
 
+## graphTimeline
+
 Run any timeline_summary benchmark using the benchmark tools in the Flutter dev/devicelab
 directory, and then:
 ```shell
@@ -60,8 +64,37 @@ The script behaves analogously to the graphAB script in terms of launching a bro
 quitting.
 
 The `graphTimeline` script also has the additional benefit of a Flutter web implementation
-that is expanded over the basic graphing mechanism. Simply specify `--web` on the command
-line to use the new mechanism. The web version improves upon the original by opening only
+that is expanded over the basic graphing mechanism. The web app implementation is now the
+default, but you can still specify `--no-web` on the command line to use the old plain
+JavaScript mechanism. The web version improves upon the original by opening only
 a single page to view multiple timeline files, switchable using a drop-down menu item in
 the title bar, and it also supports graphing from raw event timeline files - allowing you
 to graph any of the event streams in the file, not just the frame Build and Render timings.
+
+## graphDashboard
+
+An alternative graphing of the go/flutter-dashboard benchmark dashboard can be launched
+using the command:
+
+```shell
+pub global run flutter_benchmark_utils:graphDashboard
+```
+or with the pub global bin directory in your path:
+
+```shell
+graphDashboard
+```
+
+This version of the dashboard has a number of additional filtering tools that can be
+accessed using the "sort by" icon in the upper right of the page as well as scrollable
+timeline histories for individual benchmarks if you double click on the benchmark tile.
+
+There are also tiles that show all 4 "build time" or "rasterizer time" metrics overlaid
+into a single graph.
+
+The benchmark histories can also navigate forward/back by a single commit if you click
+on the graph to lock in a result and then use the navigation arrows next to the commit
+and creation date below the graph.
+
+There are 2 sliders that allow you to slide the window back and forth (the slider with
+a single thumb) or to change the size of the window (the slider with two thumbs).

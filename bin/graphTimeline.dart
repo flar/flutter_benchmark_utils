@@ -7,7 +7,7 @@ import 'package:flutter_benchmark_utils/GraphServer.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
 class TimelineGraphCommand extends GraphCommand {
-  TimelineGraphCommand() : super('graphTimeline');
+  TimelineGraphCommand() : super('graphTimeline', webClientDefault: true);
 
   @override
   GraphResult validateJson(String filename, String json, Map<String, dynamic> jsonMap, bool isWebClient) {

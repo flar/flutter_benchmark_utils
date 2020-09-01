@@ -12,18 +12,19 @@ import 'package:flutter_benchmark_utils/GraphCommand.dart';
 import 'package:flutter_benchmark_utils/GraphServer.dart';
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 
-const String kDashboardOpt = 'dashboard';
+const String kDashboardOpt = 'live-dashboard';
 
 class DashboardGraphCommand extends GraphCommand {
-  DashboardGraphCommand() : super('graphDashboard');
+  DashboardGraphCommand() : super('graphDashboard', webClientDefault: true);
 
   @override
-  void addArgOptions(ArgParser args) {
-    args.addFlag(
-      kDashboardOpt,
-      defaultsTo: true,
-      help: 'Load the information from the Flutter benchmark dashboard.',
-    );
+  ArgParser makeArgOptions() {
+    return super.makeArgOptions()
+      ..addFlag(
+        kDashboardOpt,
+        defaultsTo: true,
+        help: 'Load the information from the Flutter benchmark dashboard.',
+      );
   }
 
   @override

@@ -1,5 +1,10 @@
 ## [Unreleased versions]
 
+## [0.0.39] - 2020/09/01
+
+* graphDashboard: Fixed filters dealing with archived data
+* web apps: Fixed server to deal with new versioned file requests
+
 ## [0.0.38] - 2020/08/31
 
 * graphDashboard: Separate sliders for moving or resizing the history window

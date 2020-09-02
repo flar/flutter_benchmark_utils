@@ -164,24 +164,31 @@ abstract class GraphCommand {
     return false;
   }
 
+  String _stripVersioning(String url) {
+    final int index = url.indexOf('?');
+    return (index >= 0) ? url.substring(0, index) : url;
+  }
+
   Future<bool> handleWebLocal(HttpResponse response, String url) async {
-    final File f = File('$webAppPath/build/web$url');
+    final String fileUrl = _stripVersioning(url);
+    final File f = File('$webAppPath/build/web$fileUrl');
     if (!f.existsSync()) {
       return handleOther(response, url);
     }
-    response.headers.contentType = typeFor(url);
+    response.headers.contentType = typeFor(fileUrl);
     response.headers.contentLength = f.lengthSync();
     response.addStream(f.openRead()).then<void>((void _) => response.close());
     return true;
   }
 
   Future<bool> handleWebApp(HttpResponse response, String url) async {
+    final String fileUrl = _stripVersioning(url);
     final Archive webAppArchive = await _loadWebAppArchive();
-    final ArchiveFile f = webAppArchive.findFile('webapp$url');
+    final ArchiveFile f = webAppArchive.findFile('webapp$fileUrl');
     if (f == null) {
       return handleOther(response, url);
     }
-    response.headers.contentType = typeFor(url);
+    response.headers.contentType = typeFor(fileUrl);
     response.headers.contentLength = f.size;
     response.add(f.content as List<int>);
     response.close();

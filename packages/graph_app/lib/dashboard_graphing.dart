@@ -111,14 +111,22 @@ class DashboardFilter {
     return true;
   }
 
+  bool _matches(RegExp regexp, String name) {
+    if (regexp == null)
+      return true;
+    if (name == null)
+      return false;
+    return regexp.hasMatch(name);
+  }
+
   bool isShown(Benchmark benchmark) {
     if (!showArchived && benchmark.archived)
       return false;
     if (!showEmpty && _isEmpty(benchmark))
       return false;
-    if (taskRegExp != null && !taskRegExp.hasMatch(benchmark.task))
+    if (!_matches(taskRegExp, benchmark.task))
       return false;
-    if (labelRegExp != null && !labelRegExp.hasMatch(benchmark.descriptor.label))
+    if (!_matches(labelRegExp, benchmark.descriptor.label))
       return false;
     if (!_redEnough(benchmark))
       return false;
@@ -427,9 +435,6 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
     final Benchmark percent99 = _findByLabel(p99Label);
     final Benchmark worst = _findByLabel(worstLabel);
     if (average != null && percent90 != null && percent99 != null && worst != null) {
-      if (average.archived && percent90.archived && percent99.archived && worst.archived) {
-        return;
-      }
       widgets.add(DashboardItemSetWidget(
         label: label,
         size: size,
@@ -457,9 +462,7 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
         '99th_percentile_frame_rasterizer_time_millis',
         'worst_frame_rasterizer_time_millis');
     for (final Benchmark benchmark in widget.benchmarks) {
-      if (!benchmark.archived) {
-        widgets.add(DashboardBenchmarkItemWidget(benchmark: benchmark, size: size));
-      }
+      widgets.add(DashboardBenchmarkItemWidget(benchmark: benchmark, size: size));
     }
     return widgets;
   }

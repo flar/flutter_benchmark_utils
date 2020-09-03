@@ -1,5 +1,10 @@
 ## [Unreleased versions]
 
+## [0.0.40] - 2020/09/03
+
+* Allow zip files of benchmark data
+* Fix non-web graphs broken by some async work
+
 ## [0.0.39] - 2020/09/01
 
 * graphDashboard: Fixed filters dealing with archived data

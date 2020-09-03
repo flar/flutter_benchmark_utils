@@ -64,11 +64,11 @@ abstract class GraphCommand {
 
   bool processResults(ArgResults args, List<GraphResult> results) {
     for (final String arg in args.rest) {
-      final GraphResult result = _validateJsonFile(arg, isWebClient);
-      if (result == null) {
+      final List<GraphResult> fileResults = _validateJsonFile(arg, isWebClient);
+      if (fileResults == null) {
         return false;
       }
-      results.add(result);
+      results.addAll(fileResults);
     }
     return true;
   }
@@ -134,20 +134,39 @@ abstract class GraphCommand {
     stderr.writeln(_argParser.usage);
   }
 
-  GraphResult _validateJsonFile(String filename, bool webClient) {
+  List<GraphResult> _validateJsonFile(String filename, bool webClient) {
     final File file = File(filename);
     if (!file.existsSync()) {
       usage('$filename does not exist');
       return null;
     }
-    final String json = file.readAsStringSync();
-    final Map<String,dynamic> jsonMap = const JsonDecoder().convert(json) as Map<String,dynamic>;
-    try {
-      return validateJson(filename, json, jsonMap, webClient);
-    } catch (error) {
-      usage('$filename is not a valid $commandName results json file: $error');
-      return null;
+    final List<String> fileContents = <String>[];
+    if (filename.endsWith('.zip')) {
+      for (final ArchiveFile file in ZipDecoder().decodeBytes(file.readAsBytesSync()).files) {
+        fileContents.add(String.fromCharCodes(file.content as Iterable<int>));
+      }
+      if (fileContents.isEmpty) {
+        usage('zip file $filename contains no files');
+        return null;
+      }
+    } else {
+      fileContents.add(file.readAsStringSync());
     }
+    final List<GraphResult> results = <GraphResult>[];
+    for (final String json in fileContents) {
+      final Map<String,dynamic> jsonMap = const JsonDecoder().convert(json) as Map<String,dynamic>;
+      try {
+        final GraphResult result = validateJson(filename, json, jsonMap, webClient);
+        if (result == null) {
+          return null;
+        }
+        results.add(result);
+      } catch (error) {
+        usage('$filename is not a valid $commandName results json file: $error');
+        return null;
+      }
+    }
+    return results;
   }
 
   Archive _webAppArchive;

@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.41] - 2020/09/14
+
+* Allow zip files with multiple data files
+
 ## [0.0.40] - 2020/09/03
 
 * Allow zip files of benchmark data

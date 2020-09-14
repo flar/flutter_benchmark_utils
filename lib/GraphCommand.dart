@@ -140,23 +140,32 @@ abstract class GraphCommand {
       usage('$filename does not exist');
       return null;
     }
-    final List<String> fileContents = <String>[];
+    final Map<String,String> fileContents = <String,String>{};
     if (filename.endsWith('.zip')) {
       for (final ArchiveFile file in ZipDecoder().decodeBytes(file.readAsBytesSync()).files) {
-        fileContents.add(String.fromCharCodes(file.content as Iterable<int>));
+        final String name = '$filename:${file.name}';
+        if (file.name.endsWith('.json')) {
+          if (fileContents.containsKey(name)) {
+            stderr.writeln('multiple conflicting entries in zip file for ${name}');
+          } else {
+            fileContents[name] = String.fromCharCodes(file.content as Iterable<int>);
+          }
+        } else {
+          stderr.writeln('ignoring non-json file in zip: $name');
+        }
       }
       if (fileContents.isEmpty) {
-        usage('zip file $filename contains no files');
+        usage('zip file $filename contains no json files');
         return null;
       }
     } else {
-      fileContents.add(file.readAsStringSync());
+      fileContents[filename] = file.readAsStringSync();
     }
     final List<GraphResult> results = <GraphResult>[];
-    for (final String json in fileContents) {
-      final Map<String,dynamic> jsonMap = const JsonDecoder().convert(json) as Map<String,dynamic>;
+    for (final MapEntry<String,String> entry in fileContents.entries) {
+      final Map<String,dynamic> jsonMap = const JsonDecoder().convert(entry.value) as Map<String,dynamic>;
       try {
-        final GraphResult result = validateJson(filename, json, jsonMap, webClient);
+        final GraphResult result = validateJson(entry.key, entry.value, jsonMap, webClient);
         if (result == null) {
           return null;
         }

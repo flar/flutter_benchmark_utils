@@ -229,9 +229,9 @@ class TimelineHAxisTimePainter extends TimelineAxisPainter {
 
 class TimelineVAxisDurationPainter extends TimelineAxisPainter {
   TimelineVAxisDurationPainter(TimelinePainter graphPainter) : super(
-    rangeMin: graphPainter.timeline.worst * (1 - graphPainter.zoom.bottom),
-    rangeMax: graphPainter.timeline.worst * (1 - graphPainter.zoom.top),
-    units: graphPainter.timeline.frames.first.units,
+    rangeMin: graphPainter.timeline.maxValue * (1 - graphPainter.zoom.bottom),
+    rangeMax: graphPainter.timeline.maxValue * (1 - graphPainter.zoom.top),
+    units: graphPainter.timeline.frames.first.reading.units,
     horizontal: false,
     minTicks: 4,
     maxTicks: 10,
@@ -262,7 +262,7 @@ abstract class TimelinePainter extends CustomPainter {
 
   TimelinePainter withZoom(Rect newZoom);
 
-  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.worst);
+  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.maxValue);
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => true;
@@ -310,7 +310,7 @@ class TimelineGraphPainter extends TimelinePainter {
   }
 
   Rect getRect(GraphableEvent f, Rect view, double minWidth) =>
-      _getRectBar(f, getY(f.value, view), view, minWidth);
+      _getRectBar(f, getY(f.reading.value, view), view, minWidth);
   Rect getMaxRect(TimeFrame f, Rect bounds) =>
       _getRectBar(f, 0, bounds, 0.0);
 
@@ -350,14 +350,14 @@ class TimelineGraphPainter extends TimelinePainter {
 
     // Then lines over gaps
     paint.style = PaintingStyle.stroke;
-    drawLine(canvas, size, paint, getY(timeline.average,   view), heatColors[0]);
-    drawLine(canvas, size, paint, getY(timeline.percent90, view), heatColors[1]);
-    drawLine(canvas, size, paint, getY(timeline.percent99, view), heatColors[2]);
+    drawLine(canvas, size, paint, getY(timeline.average.value,   view), heatColors[0]);
+    drawLine(canvas, size, paint, getY(timeline.percent90.value, view), heatColors[1]);
+    drawLine(canvas, size, paint, getY(timeline.percent99.value, view), heatColors[2]);
 
     // Finally frame times over lines
     paint.style = PaintingStyle.fill;
     for (final GraphableEvent frame in timeline) {
-      paint.color = heatColors[timeline.heatIndex(frame.value)];
+      paint.color = heatColors[timeline.heatIndex(frame)];
       canvas.drawRect(getRect(frame, view, minWidth), paint);
     }
   }
@@ -374,7 +374,7 @@ class TimelineDistributionPainter extends TimelinePainter {
         indices = List<int>.generate(timeline.frames.length, (int index) => index),
         super(timeline, zoom) {
     indices.sort((int a, int b) {
-      return timeline.frames[a].value.compareTo(timeline.frames[b].value);
+      return timeline.frames[a].reading.value.compareTo(timeline.frames[b].reading.value);
     });
   }
 
@@ -402,21 +402,21 @@ class TimelineDistributionPainter extends TimelinePainter {
     canvas.clipRect(view);
 
     canvas.translate(0, size.height);
-    canvas.scale(size.width / indices.length, -size.height / timeline.worst);
+    canvas.scale(size.width / indices.length, -size.height / timeline.maxValue);
     // coordinates now go from BL(0, 0) to TR(#indices, worst)
 
     canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
-    canvas.translate(-zoom.left * indices.length, (zoom.bottom - 1) * timeline.worst);
+    canvas.translate(-zoom.left * indices.length, (zoom.bottom - 1) * timeline.maxValue);
 
     final Paint paint = Paint();
 
     final int i0 = (zoom.left * indices.length).floor();
     final int i1 = (zoom.right * indices.length).ceil();
     for (int i = i0; i < i1; i++) {
-      final double value = timeline.frames[indices[i]].value;
-      paint.color = heatColors[timeline.heatIndex(value)];
+      final GraphableEvent frame = timeline.frames[indices[i]];
+      paint.color = heatColors[timeline.heatIndex(frame)];
       final double x = i.toDouble();
-      canvas.drawRect(Rect.fromLTRB(x, 0, x+1, value), paint);
+      canvas.drawRect(Rect.fromLTRB(x, 0, x+1, frame.reading.value), paint);
     }
   }
 
@@ -474,8 +474,8 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       final TimeFrame e = newHoverFrame - timeline.wholeRun.start;
       final String start = e.start.stringSeconds();
       final String end = e.end.stringSeconds();
-      final String value = newHoverFrame.valueString;
-      final String label = timeline.labelFor(newHoverFrame.value);
+      final String value = newHoverFrame.reading.valueString;
+      final String label = timeline.labelFor(newHoverFrame);
       setState(() {
         _hoverFrame = newHoverFrame;
         _hoverString = 'frame[$start => $end] = $value ($label)';
@@ -676,12 +676,12 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
       ),
     );
 
-    Row _makeLegendItem(String name, double value, Color color) {
+    Row _makeLegendItem(String name, UnitValue value, Color color) {
       return Row(
         children: <Widget>[
           Container(alignment: Alignment.center, color: color, width: 12, height: 12,),
           Container(width: 10),
-          Text('$name: ${value.toStringAsFixed(3)}'),
+          Text('$name: ${value.valueString}'),
         ],
       );
     }

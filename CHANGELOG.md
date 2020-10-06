@@ -1,5 +1,9 @@
 ## [Unreleased versions]
 
+## [0.0.42] - 2020/10/06
+
+* Add graphing of upcoming DiffContext count statistics
+
 ## [0.0.41] - 2020/09/14
 
 * Allow zip files with multiple data files

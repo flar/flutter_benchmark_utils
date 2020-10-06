@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:meta/meta.dart';
 
@@ -49,46 +50,111 @@ class ThreadInfo {
   String get worstKey     => _measurementKey('worst');
 }
 
+abstract class UnitValue {
+  double get value;
+  String get units;
+  int get _precision => 3;
+  String get valueString => '${value.toStringAsFixed(_precision)}$units';
+
+  UnitValue makeValue(double v);
+}
+
+abstract class DoubleUnitValue extends UnitValue {
+  DoubleUnitValue(this.value);
+
+  @override final double value;
+}
+
+class MillisValue extends DoubleUnitValue {
+  MillisValue(double value) : super(value);
+
+  static final MillisValue oneMicrosecond = MillisValue(TimeVal.oneMicrosecond.millis);
+
+  @override String get units => 'ms';
+
+  @override UnitValue makeValue(double v) => MillisValue(v);
+}
+
+class PercentValue extends DoubleUnitValue {
+  PercentValue(double value) : super(value);
+
+  static final PercentValue onePercent = PercentValue(1.0);
+
+  @override int get _precision => 1;
+  @override String get units => '%';
+
+  @override UnitValue makeValue(double v) => PercentValue(v);
+}
+
+abstract class CountValue extends DoubleUnitValue {
+  CountValue(double value) : super(value);
+
+  @override String get valueString => '$value $units${value == 1 ? '' : 's'}';
+}
+
+class PictureCountValue extends CountValue {
+  PictureCountValue(double value) : super(value);
+
+  static final PictureCountValue onePicture = PictureCountValue(1.0);
+
+  @override String get units => 'picture';
+
+  @override UnitValue makeValue(double v) => PictureCountValue(v);
+}
+
 abstract class GraphableEvent extends TimeFrame implements Comparable<GraphableEvent> {
   GraphableEvent({@required TimeVal start, TimeVal end, TimeVal duration})
       : super(start: start, end: end, duration: duration);
 
-  double get value;
-  String get valueString;
-  String get units;
+  UnitValue get reading;
+  UnitValue get minRange;
 
-  @override int compareTo(GraphableEvent other) => value.compareTo(other.value);
+  @override int compareTo(GraphableEvent other) => reading.value.compareTo(other.reading.value);
 }
 
-class MillisDurationEvent extends GraphableEvent {
+class MillisDurationEvent extends GraphableEvent with UnitValue {
   MillisDurationEvent({@required TimeVal start, TimeVal end, TimeVal duration})
       : super(start: start, end: end, duration: duration);
 
   @override double get value => duration.millis;
-  @override String get valueString => duration.stringMillis();
   @override String get units => 'ms';
+  @override UnitValue get reading => this;
+  @override UnitValue get minRange => MillisValue(TimeVal.oneMicrosecond.millis);
+
+  @override UnitValue makeValue(double v) => MillisValue(v);
 }
 
 class PercentUsageEvent extends GraphableEvent {
-  PercentUsageEvent({@required TimeVal measurementTime, @required this.percent})
-      : super(start: measurementTime, duration: TimeVal.fromNanos(1));
+  PercentUsageEvent({@required TimeVal measurementTime, @required double percent})
+      : reading = PercentValue(percent),
+        super(start: measurementTime, duration: TimeVal.fromNanos(1));
 
-  final double percent;
+  @override final PercentValue reading;
 
-  @override double get value => percent;
-  @override String get valueString => '${percent.toStringAsFixed(1)}%';
-  @override String get units => '%';
+  @override UnitValue get minRange => PercentValue.onePercent;
+}
+
+class PictureCounterEvent extends GraphableEvent {
+  PictureCounterEvent({@required TimeVal measurementTime, @required double count})
+      : reading = PictureCountValue(count),
+        super(start: measurementTime, duration: TimeVal.fromNanos(1));
+
+  @override final PictureCountValue reading;
+
+  @override UnitValue get minRange => PictureCountValue.onePicture;
 }
 
 class TimelineThreadResults extends Iterable<GraphableEvent> {
   factory TimelineThreadResults.fromSummaryMap(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
+    final UnitValue worst = _getTimeVal(jsonMap, threadInfo.worstKey);
     return TimelineThreadResults._internal(
       titleName:  threadInfo.titleName,
       frames:     _getFrameListMicros(jsonMap, threadInfo.startKey, threadInfo.durationKey),
       average:    _getTimeVal(jsonMap, threadInfo.averageKey),
       percent90:  _getTimeVal(jsonMap, threadInfo.percent90Key),
       percent99:  _getTimeVal(jsonMap, threadInfo.percent99Key),
-      worst:      _getTimeVal(jsonMap, threadInfo.worstKey),
+      worst:      worst,
+      minRange:   MillisValue.oneMicrosecond,
     );
   }
 
@@ -105,14 +171,14 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
 
     // Then sort by duration for statistics
     frames.sort();
-    final double valueSum = frames.fold(0.0, (double prev, GraphableEvent e) => prev + e.value);
     return TimelineThreadResults._internal(
       titleName:  titleName,
       frames:     immutableFrames,
-      average:    valueSum * (1.0 / frames.length),
-      percent90:  _percent(frames, 90).value,
-      percent99:  _percent(frames, 99).value,
-      worst:      frames.last.value,
+      average:    _average(frames),
+      percent90:  _percent(frames, 90).reading,
+      percent99:  _percent(frames, 99).reading,
+      worst:      frames.last.reading,
+      minRange:   frames.last.minRange,
     );
   }
 
@@ -123,13 +189,15 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
     @required this.percent90,
     @required this.percent99,
     @required this.worst,
+    @required this.minRange,
   })
       : assert(titleName != null),
         assert(frames != null),
         assert(average != null),
         assert(percent90 != null),
         assert(percent99 != null),
-        assert(worst != null);
+        assert(worst != null),
+        assert(minRange != null);
 
   static bool hasSummaryValues(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
     try {
@@ -158,12 +226,14 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
   }
 
   final String titleName;
-  final double average;
-  final double percent90;
-  final double percent99;
-  final double worst;
+  final UnitValue average;
+  final UnitValue percent90;
+  final UnitValue percent99;
+  final UnitValue worst;
+  final UnitValue minRange;
   final List<GraphableEvent> frames;
 
+  double get maxValue => max(worst.value, minRange.value);
   int get frameCount => frames.length;
 
   @override
@@ -174,10 +244,10 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
   TimeVal get duration => end - start;
   TimeFrame get wholeRun => TimeFrame(start: start, end: end);
 
-  static double _getTimeVal(Map<String,dynamic> jsonMap, String key) {
+  static UnitValue _getTimeVal(Map<String,dynamic> jsonMap, String key) {
     final dynamic rawTimeVal = jsonMap[key];
     if (rawTimeVal is num) {
-      return rawTimeVal.toDouble();
+      return MillisValue(rawTimeVal.toDouble());
     }
     throw '$key entry is not a number';
   }
@@ -241,6 +311,12 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
               keys.add(name);
             }
             break;
+          case 'C':
+            if (name == 'DiffContext') {
+              final Map<String,dynamic> args = event['args'] as Map<String,dynamic>;
+              keys.addAll(args.keys.map((String key) => 'DiffContext:$key'));
+            }
+            break;
           case 'i':
             if (name == 'GpuUsage' || name == 'CpuUsage') {
               keys.add(name);
@@ -252,7 +328,7 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
     return <String>[
       if (hasBuild) ThreadInfo.build.titleName,
       if (hasRender) ThreadInfo.render.titleName,
-      ...keys,
+      ...List<String>.of(keys)..sort(),
     ];
   }
 
@@ -260,11 +336,14 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
     final List<GraphableEvent> frames = <GraphableEvent>[];
     TimeVal startMicros;
     bool isSorted = true;
+    final String name = key.startsWith('DiffContext:') ? 'DiffContext' : key;
     final String argKey = key == 'GpuUsage' ? 'gpu_usage'
-        : key == 'CpuUsage' ? 'total_cpu_usage' : null;
+        : key == 'CpuUsage' ? 'total_cpu_usage'
+        : key.startsWith('DiffContext:') ? key.substring(12)
+        : null;
     for (final dynamic rawEvent in eventList) {
       final Map<String,dynamic> event = rawEvent as Map<String,dynamic>;
-      if (event['name'] == key) {
+      if (event['name'] == name) {
         switch (event['ph'] as String) {
           case 'B':
           case 'b':
@@ -289,15 +368,18 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
               isSorted = false;
             }
             break;
+          case 'C':
           case 'i': {
-            print('found matching instant event');
             final dynamic args = event['args'];
             if (args is Map<String,dynamic>) {
-              final dynamic usage = args[argKey];
-              if (usage is String) {
-                final double usageVal = double.parse(usage);
+              final dynamic valueString = args[argKey];
+              if (valueString is String) {
+                final double value = double.parse(valueString);
                 final TimeVal measurementUs = TimeVal.fromMicros(event['ts'] as num);
-                frames.add(PercentUsageEvent(measurementTime: measurementUs, percent: usageVal));
+                frames.add(name == 'DiffContext'
+                    ? PictureCounterEvent(measurementTime: measurementUs, count: value)
+                    : PercentUsageEvent(measurementTime: measurementUs, percent: value)
+                );
                 if (isSorted && frames.last.start < frames[frames.length - 1].start) {
                   isSorted = false;
                 }
@@ -316,6 +398,12 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
       frames.sort(TimeFrame.startOrder);
     }
     return frames;
+  }
+
+  static UnitValue _average(List<GraphableEvent> list) {
+    final double valueSum = list.fold<double>(0.0,
+            (double previousValue, GraphableEvent element) => previousValue + element.reading.value);
+    return list.first.reading.makeValue(valueSum * (1.0 / list.length));
   }
 
   static T _percent<T>(List<T> list, double percent) {
@@ -365,17 +453,19 @@ class TimelineThreadResults extends Iterable<GraphableEvent> {
   GraphableEvent eventAt(TimeVal t) => _find(t, true);
   GraphableEvent eventNear(TimeVal t) => _find(t, false);
 
-  String labelFor(double t) {
-    return (t < average) ? 'Good'
-        : (t < percent90) ? 'Nominal'
-        : (t < percent99) ? '90th Percentile'
+  String labelFor(GraphableEvent t) {
+    final double v = t.reading.value;
+    return (v < average.value) ? 'Good'
+        : (v < percent90.value) ? 'Nominal'
+        : (v < percent99.value) ? '90th Percentile'
         : '99th Percentile';
   }
 
-  int heatIndex(double t) {
-    return (t < average) ? 0
-        : (t < percent90) ? 1
-        : (t < percent99) ? 2
+  int heatIndex(GraphableEvent t) {
+    final double v = t.reading.value;
+    return (v < average.value) ? 0
+        : (v < percent90.value) ? 1
+        : (v < percent99.value) ? 2
         : 3;
   }
 }

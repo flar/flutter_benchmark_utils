@@ -18,3 +18,4 @@ dependencies:
   open_url: 1.0.1
   archive: ^2.0.13
   http: ^0.12.2
+  meta: ^1.7.0

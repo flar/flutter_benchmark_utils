@@ -2,18 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_benchmark_utils/benchmark_data.dart';
-
+import 'dashboard_benchmarks.dart';
 import 'timeline_summary.dart';
 
 enum BenchmarkType {
   TIMELINE_SUMMARY,
   TIMELINE_TRACE,
+  MEMINFO_TRACE,
   BENCHMARK_AB_COMPARISON,
   BENCHMARK_DASHBOARD,
 }
 
 class BenchmarkUtils {
+  BenchmarkUtils();
+
   static void validateJsonEntryIsNumber(Map<String,dynamic> map, String key) {
     final dynamic val = map[key];
     if (val is! num) {
@@ -37,10 +39,16 @@ class BenchmarkUtils {
     }
   }
 
-  static void validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key) {
-    final dynamic val = jsonMap[key];
+  static void validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key, {List<String>? omitKeys}) {
+    dynamic val = jsonMap[key];
     if (val == null) {
       throw 'missing $key';
+    }
+    if (val is! Map<String,dynamic>) {
+      throw 'not a map with String keys: $key';
+    }
+    if (omitKeys != null) {
+      val = Map<String, dynamic>.fromEntries(val.entries.where((MapEntry<String, dynamic> element) => !omitKeys.contains(element.key)));
     }
     if (val is Map<String,List<num>> ||
         val is Map<String,List<int>> ||
@@ -52,6 +60,7 @@ class BenchmarkUtils {
       for (final String subKey in map.keys) {
         validateJsonEntryIsNumberList(map, subKey);
       }
+      return;
     }
     throw 'unrecognized $key: $val is not Map<String,List<num>>';
   }
@@ -66,15 +75,15 @@ class BenchmarkUtils {
     try {
       validateJsonEntryMatches(jsonMap, 'benchmark_type', 'A/B summaries');
       validateJsonEntryMatches(jsonMap, 'version', '1.0');
-      validateJsonEntryMapsStringToNumberList(jsonMap, 'default_results');
-      validateJsonEntryMapsStringToNumberList(jsonMap, 'local_engine_results');
+      validateJsonEntryMapsStringToNumberList(jsonMap, 'default_results', omitKeys: <String>[ 'caption' ]);
+      validateJsonEntryMapsStringToNumberList(jsonMap, 'local_engine_results', omitKeys: <String>[ 'caption' ]);
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  static BenchmarkType getBenchmarkType(Map<String,dynamic> jsonMap) {
+  static BenchmarkType? getBenchmarkType(Map<String,dynamic> jsonMap) {
     if (TimelineResults.isSummaryMap(jsonMap)) {
       return BenchmarkType.TIMELINE_SUMMARY;
     }

@@ -4,5 +4,7 @@
 
 export 'src/benchmark_utils.dart';
 export 'src/dashboard_benchmarks.dart';
+export 'src/graph_utils.dart';
+export 'src/meminfo.dart';
 export 'src/time_utils.dart';
 export 'src/timeline_summary.dart';

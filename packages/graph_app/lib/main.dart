@@ -4,14 +4,12 @@
 
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_benchmark_utils/benchmark_data.dart';
 import 'package:graph_app/dashboard_graphing.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:flutter/material.dart';
-
-import 'package:flutter_benchmark_utils/benchmark_data.dart';
-
-import 'timeline_summary_graphing.dart';
+import 'series_graphing.dart';
 
 void main() {
   runApp(_GraphApp());
@@ -33,7 +31,7 @@ class _TimelineGraphPage extends StatefulWidget {
 }
 
 Future<void> performGet(String url, void onValue(http.Response value), void onError(String msg)) async {
-  await http.get(url)
+  await http.get(Uri.parse(url))
       .then(onValue)
       .catchError((dynamic error) => onError('Error contacting results server for [$url]: $error'));
 }
@@ -46,17 +44,16 @@ class _GraphTab {
 }
 
 class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTickerProviderStateMixin {
-  List<_GraphTab> _tabs;
-  String _message;
+  final List<_GraphTab> _tabs = <_GraphTab>[];
+  String? _message;
 
   @override
   void initState() {
     super.initState();
-    _tabs = <_GraphTab>[];
     getList();
   }
 
-  void setMessage(String message, [String key]) {
+  void setMessage(String message) {
     setState(() {
       _message = message;
     });
@@ -72,7 +69,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
     } else {
       final String typeName = key.substring(0, colonIndex);
       name = key.substring(colonIndex + 1);
-      BenchmarkType type;
+      BenchmarkType? type;
       switch (typeName) {
         case 'BenchmarkType.TIMELINE_TRACE':
           type = BenchmarkType.TIMELINE_TRACE;
@@ -82,6 +79,9 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
           break;
         case 'BenchmarkType.BENCHMARK_DASHBOARD':
           type = BenchmarkType.BENCHMARK_DASHBOARD;
+          break;
+        case 'BenchmarkType.MEMINFO_TRACE':
+          type = BenchmarkType.MEMINFO_TRACE;
           break;
         case 'BenchmarkType.BENCHMARK_AB_COMPARISON':
         default:
@@ -127,7 +127,7 @@ class _TimelineGraphPageState extends State<_TimelineGraphPage> with SingleTicke
             tabs: <Widget>[ ..._tabs.map((_GraphTab tab) => Text(tab.name)) ],
           ),
         ),
-        body: _message != null ? Text(_message) : TabBarView(
+        body: _message != null ? Text(_message!) : TabBarView(
           children: <Widget>[ ..._tabs.map((_GraphTab tab) => tab.graph) ],
         ),
       ),
@@ -146,7 +146,7 @@ class _TimelineLoaderPage extends StatefulWidget {
 }
 
 class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with AutomaticKeepAliveClientMixin {
-  Widget _body;
+  late Widget _body;
 
   @override
   void initState() {
@@ -172,7 +172,10 @@ class _TimelineLoaderPageState extends State<_TimelineLoaderPage> with Automatic
     switch (widget.pageType) {
       case BenchmarkType.TIMELINE_TRACE:
       case BenchmarkType.TIMELINE_SUMMARY:
-        setBody(TimelineResultsGraphWidget(TimelineResults(decoded)));
+        setBody(SeriesSourceGraphWidget(TimelineResults(decoded)));
+        break;
+      case BenchmarkType.MEMINFO_TRACE:
+        setBody(SeriesSourceGraphWidget(MeminfoSeriesSource.fromJsonMap(decoded)));
         break;
       case BenchmarkType.BENCHMARK_DASHBOARD:
         setBody(DashboardGraphWidget(BenchmarkDashboard.fromJsonMap(decoded)));

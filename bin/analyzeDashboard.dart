@@ -32,10 +32,10 @@ Future<void> main(List<String> rawArgs) async {
   final Map<String,List<Benchmark>> tasks = dashboard.allTasks;
   for (final String name in tasks.keys) {
     print('  $name:');
-    for (final Benchmark b in tasks[name].where((Benchmark b) => !b.descriptor.archived)) {
+    for (final Benchmark b in tasks[name]!.where((Benchmark b) => !b.descriptor.archived)) {
       print('    ${b.descriptor.label}: ${b.values.length} values');
     }
-    for (final Benchmark b in tasks[name].where((Benchmark b) => b.descriptor.archived)) {
+    for (final Benchmark b in tasks[name]!.where((Benchmark b) => b.descriptor.archived)) {
       print('    (archived) ${b.descriptor.label}: ${b.values.length} values');
     }
   }

@@ -4,16 +4,16 @@
 
 import 'dart:math';
 
+// import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 
-import 'package:http/http.dart' as http;
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
+import 'package:http/http.dart' as http;
 
 import 'input_utils.dart';
 
 Future<void> _openUrl(String url) async {
-  await http.get('/launchUrl?url=${Uri.encodeComponent(url)}');
+  await http.get(Uri.parse('/launchUrl?url=${Uri.encodeComponent(url)}'));
 }
 
 int _clamp(int index, List<dynamic> list) {
@@ -40,8 +40,8 @@ class DashboardFilter {
 
   final bool showArchived;
   final bool showEmpty;
-  final RegExp taskRegExp;
-  final RegExp labelRegExp;
+  final RegExp? taskRegExp;
+  final RegExp? labelRegExp;
   final int minimumRed;
 
   DashboardFilter withShowArchived(bool showArchived) =>
@@ -111,7 +111,7 @@ class DashboardFilter {
     return true;
   }
 
-  bool _matches(RegExp regexp, String name) {
+  bool _matches(RegExp? regexp, String? name) {
     if (regexp == null)
       return true;
     if (name == null)
@@ -147,11 +147,11 @@ class DashboardFilter {
 }
 
 class DashboardFilterWidget extends StatefulWidget {
-  const DashboardFilterWidget(this.initialFilter, this.onChanged, [this.onRemove, this.maxRed = 60]);
+  const DashboardFilterWidget(this.initialFilter, this.onChanged, [ this.onRemove, this.maxRed = 60]);
 
   final DashboardFilter initialFilter;
   final Function(DashboardFilter newFilter) onChanged;
-  final Function() onRemove;
+  final Function()? onRemove;
   final int maxRed;
 
   @override
@@ -175,9 +175,9 @@ class DashboardFilterState extends State<DashboardFilterWidget> {
     decoration: TextDecoration.none,
   );
 
-  DashboardFilter filter;
-  TextEditingController taskController;
-  TextEditingController labelController;
+  late DashboardFilter filter;
+  late TextEditingController taskController;
+  late TextEditingController labelController;
 
   void _setFilter(DashboardFilter newFilter) {
     setState(() {
@@ -237,7 +237,7 @@ class DashboardFilterState extends State<DashboardFilterWidget> {
 
   TableRow _makeBoolRow(String label, bool currentValue, void onChanged(bool newValue)) {
     return _makeRow(label,
-      Checkbox(value: currentValue, onChanged: onChanged),
+      Checkbox(value: currentValue, onChanged: (bool? value) => onChanged(value!)),
     );
   }
 
@@ -257,7 +257,7 @@ class DashboardFilterState extends State<DashboardFilterWidget> {
     return Stack(
       children: <Widget>[
         Positioned(
-          child: FlatButton(
+          child: ElevatedButton(
             child: const Icon(Icons.close),
             onPressed: widget.onRemove,
           ),
@@ -282,8 +282,7 @@ class DashboardFilterState extends State<DashboardFilterWidget> {
 }
 
 class DashboardGraphWidget extends StatefulWidget {
-  const DashboardGraphWidget(this.results)
-      : assert(results != null);
+  const DashboardGraphWidget(this.results);
 
   final BenchmarkDashboard results;
 
@@ -292,10 +291,10 @@ class DashboardGraphWidget extends StatefulWidget {
 }
 
 class DashboardGraphState extends State<DashboardGraphWidget> {
-  ScrollController _controller;
+  late ScrollController _controller;
 
   DashboardFilter filter = const DashboardFilter();
-  OverlayEntry _filterEditor;
+  OverlayEntry? _filterEditor;
 
   @override
   void initState() {
@@ -312,7 +311,7 @@ class DashboardGraphState extends State<DashboardGraphWidget> {
 
   Iterable<String> _taskNames() {
     return widget.results.allTasks.keys.where((String taskName) {
-      for (final Benchmark benchmark in widget.results.allTasks[taskName]) {
+      for (final Benchmark benchmark in widget.results.allTasks[taskName]!) {
         if (filter.isShown(benchmark))
           return true;
       }
@@ -321,7 +320,7 @@ class DashboardGraphState extends State<DashboardGraphWidget> {
   }
 
   List<Benchmark> _benchmarksForTask(String taskName) {
-    return widget.results.allTasks[taskName]
+    return widget.results.allTasks[taskName]!
         .where((Benchmark benchmark) => filter.isShown(benchmark))
         .toList();
   }
@@ -366,7 +365,7 @@ class DashboardGraphState extends State<DashboardGraphWidget> {
       },
     );
 
-    Overlay.of(context).insert(_filterEditor);
+    Overlay.of(context)!.insert(_filterEditor!);
   }
 
   @override
@@ -392,8 +391,7 @@ class DashboardGraphState extends State<DashboardGraphWidget> {
         Positioned(
           right: 5.0,
           top: 5.0,
-          child: RaisedButton(
-            color: Colors.grey.shade400.withAlpha(128),
+          child: ElevatedButton(
             child: const Icon(Icons.sort),
             onPressed: () => _showFilters(context),
           ),
@@ -414,7 +412,7 @@ class DashboardTaskWidget extends StatefulWidget {
 }
 
 class DashboardTaskState extends State<DashboardTaskWidget> {
-  Benchmark _findByLabel(String label) {
+  Benchmark? _findByLabel(String label) {
     for (final Benchmark benchmark in widget.benchmarks) {
       if (benchmark.descriptor.label == label) {
         return benchmark;
@@ -429,11 +427,12 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
       String avgLabel,
       String p90Label,
       String p99Label,
-      String worstLabel) {
-    final Benchmark average = _findByLabel(avgLabel);
-    final Benchmark percent90 = _findByLabel(p90Label);
-    final Benchmark percent99 = _findByLabel(p99Label);
-    final Benchmark worst = _findByLabel(worstLabel);
+      String worstLabel)
+  {
+    final Benchmark? average = _findByLabel(avgLabel);
+    final Benchmark? percent90 = _findByLabel(p90Label);
+    final Benchmark? percent99 = _findByLabel(p99Label);
+    final Benchmark? worst = _findByLabel(worstLabel);
     if (average != null && percent90 != null && percent99 != null && worst != null) {
       widgets.add(DashboardItemSetWidget(
         label: label,
@@ -442,6 +441,25 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
         percent90Benchmark: percent90,
         percent99Benchmark: percent99,
         worstBenchmark: worst,
+      ));
+    }
+  }
+
+  void _addItemFrameWidget(
+      List<DashboardBenchmarkItemBase> widgets, Size size,
+      String label,
+      String buildLabel,
+      String paintLabel)
+  {
+    final Benchmark? build = _findByLabel(buildLabel);
+    final Benchmark? paint = _findByLabel(paintLabel);
+    if (build != null && paint != null) {
+      widgets.add(DashboardItemFrameWidget(
+        label: label,
+        size: size,
+        buildBenchmark: build,
+        paintBenchmark: paint,
+        totalBenchmark: build + paint,
       ));
     }
   }
@@ -461,6 +479,10 @@ class DashboardTaskState extends State<DashboardTaskWidget> {
         '90th_percentile_frame_rasterizer_time_millis',
         '99th_percentile_frame_rasterizer_time_millis',
         'worst_frame_rasterizer_time_millis');
+    _addItemFrameWidget(widgets, size,
+        'Stacked Build+Render Average Frame Times',
+        'average_frame_build_time_millis',
+        'average_frame_rasterizer_time_millis');
     for (final Benchmark benchmark in widget.benchmarks) {
       widgets.add(DashboardBenchmarkItemWidget(benchmark: benchmark, size: size));
     }
@@ -509,13 +531,15 @@ class DashboardHistoryDetailWidget extends StatefulWidget {
 }
 
 class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
-  DashboardBenchmarkItemBase history;
-  ValueNotifier<RangeValues> range = ValueNotifier<RangeValues>(null);
-  ValueNotifier<BenchmarkCursor> cursor = ValueNotifier<BenchmarkCursor>(null);
-  double count;
+  static const Size _historySize = Size(800.0, 200.0);
 
-  double get _rangeWidth => range.value.end - range.value.start;
-  double get _rangeCenter => (range.value.start + range.value.end) * 0.5;
+  DashboardBenchmarkItemBase? history;
+  ValueNotifier<RangeValues?> range = ValueNotifier<RangeValues?>(null);
+  ValueNotifier<BenchmarkCursor?> cursor = ValueNotifier<BenchmarkCursor?>(null);
+  double? count;
+
+  double get _rangeWidth => range.value!.end - range.value!.start;
+  double get _rangeCenter => (range.value!.start + range.value!.end) * 0.5;
 
   @override
   void initState() {
@@ -531,13 +555,14 @@ class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
 
   void _getHistory() {
     widget.tile.makeDetail(
-      size: const Size(800.0, 200.0),
+      size: _historySize,
       range: range,
       cursor: cursor,
     ).then((DashboardBenchmarkItemBase value) {
       setState(() {
         history = value;
-        count = value.valueCount.toDouble();
+        final double count = value.valueCount.toDouble();
+        this.count = count;
         if (count > 400) {
           range.value = RangeValues(count - 400, count);
         } else {
@@ -553,13 +578,16 @@ class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
 
   void _setRangeCenter(double newCenter) {
     double delta = newCenter - _rangeCenter;
-    if (range.value.end + delta > count) {
-      delta = count - range.value.end;
+    final double start = range.value!.start;
+    final double end = range.value!.end;
+    final double count = this.count!;
+    if (end + delta > count) {
+      delta = count - end;
     }
-    if (range.value.start + delta < 0.0) {
-      delta = 0.0 - range.value.start;
+    if (start + delta < 0.0) {
+      delta = 0.0 - start;
     }
-    range.value = RangeValues(range.value.start + delta, range.value.end + delta);
+    range.value = RangeValues(start + delta, end + delta);
   }
 
   @override
@@ -577,10 +605,10 @@ class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Container(
-                width: 800 * (1 - _rangeWidth / count),
+                width: 800 * (1 - _rangeWidth / count!),
                 child: Slider(
                   min: _rangeWidth * 0.5,
-                  max: count - _rangeWidth * 0.5,
+                  max: count! - _rangeWidth * 0.5,
                   value: _rangeCenter,
                   onChanged: _setRangeCenter,
                 ),
@@ -589,8 +617,8 @@ class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
                 width: 800,
                 child: RangeSlider(
                   min: 0.0,
-                  max: count,
-                  values: range.value,
+                  max: count!,
+                  values: range.value!,
                   onChanged: _setRange,
                 ),
               ),
@@ -600,16 +628,16 @@ class DashboardHistoryDetailState extends State<DashboardHistoryDetailWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              if (cursor.value.bumpLeft != null)
-                FlatButton(onPressed: cursor.value.bumpLeft, child: const Icon(Icons.keyboard_arrow_left)),
+              if (cursor.value!.bumpLeft != null)
+                ElevatedButton(onPressed: cursor.value!.bumpLeft, child: const Icon(Icons.keyboard_arrow_left)),
               Column(
                 children: <Widget>[
-                  HttpLink.fromGitRevision('Revision: ', cursor.value.value.revision),
-                  Text('Created On: ${cursor.value.value.createTimestamp}'),
+                  HttpLink.fromGitRevision('Revision: ', cursor.value!.value.revision),
+                  Text('Created On: ${cursor.value!.value.createTimestamp}'),
                 ],
               ),
-              if (cursor.value.bumpRight != null)
-                FlatButton(onPressed: cursor.value.bumpRight, child: const Icon(Icons.keyboard_arrow_right)),
+              if (cursor.value!.bumpRight != null)
+                ElevatedButton(onPressed: cursor.value!.bumpRight, child: const Icon(Icons.keyboard_arrow_right)),
             ],
           ),
       ],
@@ -644,9 +672,9 @@ class HttpLink extends StatelessWidget {
 @immutable
 class BenchmarkCursor {
   const BenchmarkCursor({
-    this.index,
-    this.value,
-    this.temporary,
+    required this.index,
+    required this.value,
+    required this.temporary,
     this.bumpLeft,
     this.bumpRight,
   });
@@ -655,33 +683,31 @@ class BenchmarkCursor {
   final TimeSeriesValue value;
   final bool temporary;
 
-  final void Function() bumpLeft;
-  final void Function() bumpRight;
+  final void Function()? bumpLeft;
+  final void Function()? bumpRight;
 }
 
 abstract class DashboardBenchmarkItemBase extends StatefulWidget {
   const DashboardBenchmarkItemBase({
-    this.size,
+    required this.size,
     this.isHistory = false,
-    this.range,
-    this.cursor,
+    required this.range,
+    required this.cursor,
   });
 
   final Size size;
   final bool isHistory;
-  final ValueNotifier<RangeValues> range;
-  final ValueNotifier<BenchmarkCursor> cursor;
+  final ValueNotifier<RangeValues?>? range;
+  final ValueNotifier<BenchmarkCursor?>? cursor;
 
   String get taskName;
   String get label;
   int get valueCount;
-  double get goal;
-  double get baseline;
 
   Future<DashboardBenchmarkItemBase> makeDetail({
-    Size size,
-    ValueNotifier<RangeValues> range,
-    ValueNotifier<BenchmarkCursor> cursor,
+    required Size size,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
   });
 }
 
@@ -691,7 +717,7 @@ abstract class _DashboardItemPainterBase extends CustomPainter {
       Size size,
       Paint paint,
       Benchmark benchmark,
-      RangeValues range,
+      RangeValues? range,
       double worst,
       Color colorFor(TimeSeriesValue tsv)) {
     final int numValues = benchmark.values.length;
@@ -718,7 +744,7 @@ abstract class _DashboardItemPainterBase extends CustomPainter {
       Paint paint,
       Benchmark benchmark,
       int valueIndex,
-      RangeValues range,
+      RangeValues? range,
       bool paintValue) {
     // values go from most recent at index 0 to earlier values as index increases
     // range specifies leftmost (oldest) to rightmost (newest)
@@ -756,14 +782,14 @@ abstract class _DashboardItemPainterBase extends CustomPainter {
 
 class _DashboardItemPainter extends _DashboardItemPainterBase {
   _DashboardItemPainter({
-    this.benchmark,
+    required this.benchmark,
+    required this.range,
     this.highlightIndex,
-    this.range,
   });
 
   final Benchmark benchmark;
-  final int highlightIndex;
-  final RangeValues range;
+  final int? highlightIndex;
+  final RangeValues? range;
 
   Color _colorFor(TimeSeriesValue tsv) {
     if (tsv.dataMissing) {
@@ -787,7 +813,7 @@ class _DashboardItemPainter extends _DashboardItemPainterBase {
     final Paint paint = Paint();
     if (highlightIndex != null) {
       paint.color = Colors.black;
-      _paintHighlight(canvas, size, paint, benchmark, highlightIndex, range, true);
+      _paintHighlight(canvas, size, paint, benchmark, highlightIndex!, range, true);
     }
     _paintSeries(canvas, size, paint, benchmark, range, benchmark.worst, _colorFor);
     _drawLine(canvas, size, paint, _yFor(benchmark.descriptor.goal, benchmark.worst, size), Colors.green);
@@ -800,11 +826,11 @@ class _DashboardItemPainter extends _DashboardItemPainterBase {
 
 class DashboardBenchmarkItemWidget extends DashboardBenchmarkItemBase {
   const DashboardBenchmarkItemWidget({
-    this.benchmark,
-    Size size,
+    required this.benchmark,
+    required Size size,
     bool isHistory = false,
-    ValueNotifier<RangeValues> range,
-    ValueNotifier<BenchmarkCursor> cursor,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
   }) : super(size: size, isHistory: isHistory, range: range, cursor: cursor);
 
   final Benchmark benchmark;
@@ -812,14 +838,12 @@ class DashboardBenchmarkItemWidget extends DashboardBenchmarkItemBase {
   @override String get taskName => benchmark.descriptor.taskName;
   @override String get label => benchmark.descriptor.label;
   @override int get valueCount => benchmark.values.length;
-  @override double get goal => benchmark.descriptor.goal;
-  @override double get baseline => benchmark.descriptor.baseline;
 
   @override
   Future<DashboardBenchmarkItemBase> makeDetail({
-    Size size,
-    ValueNotifier<RangeValues> range,
-    ValueNotifier<BenchmarkCursor> cursor,
+    required Size size,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
   }) async {
     return DashboardBenchmarkItemWidget(
       benchmark: await benchmark.getFullHistory(base: ''),
@@ -838,9 +862,9 @@ abstract class DashboardBenchmarkItemStateBase<T extends DashboardBenchmarkItemB
   final GlobalKey _mouseKey = GlobalKey();
   bool _wasLocked = false;
   bool _locked = false;
-  ValueNotifier<BenchmarkCursor> _cursor;
+  late ValueNotifier<BenchmarkCursor?> _cursor;
 
-  RangeValues _defaultRange;
+  late RangeValues _defaultRange;
   RangeValues get _range => widget.range?.value ?? _defaultRange;
   Benchmark get main;
 
@@ -848,40 +872,38 @@ abstract class DashboardBenchmarkItemStateBase<T extends DashboardBenchmarkItemB
   void initState() {
     super.initState();
     _defaultRange = RangeValues(0, main.values.length.toDouble());
-    if (widget.range != null) {
-      widget.range.addListener(_update);
-    }
-    _cursor = widget.cursor ?? ValueNotifier<BenchmarkCursor>(null);
+    widget.range?.addListener(_update);
+    _cursor = widget.cursor ?? ValueNotifier<BenchmarkCursor?>(null);
     _cursor.addListener(_update);
   }
 
-  String get _goalString;
+  String? get _goalString;
 
   void _update() {
     setState(() {});
   }
 
-  void _setSelected(int index, bool temporary) {
+  void _setSelected(int? index, bool temporary) {
     if (index == null) {
       _cursor.value = null;
       return;
     }
     index = _clamp(index, main.values);
     _adjustRange(index);
-    final BenchmarkCursor current = _cursor.value;
+    final BenchmarkCursor? current = _cursor.value;
     if (current == null || current.index != index || current.temporary != temporary) {
       _cursor.value = BenchmarkCursor(
         index: index,
         value: _getValue(main, index),
         temporary: temporary,
-        bumpLeft: temporary ? null : () => _setSelected(index - 1, false),
-        bumpRight: temporary ? null : () => _setSelected(index + 1, false),
+        bumpLeft: temporary ? null : () => _setSelected(index! - 1, false),
+        bumpRight: temporary ? null : () => _setSelected(index! + 1, false),
       );
     }
   }
 
   void _adjustRange(int index) {
-    final RangeValues range = widget.range?.value;
+    final RangeValues? range = widget.range?.value;
     if (range != null) {
       double bump = 0;
       if (index + 1 > range.end) {
@@ -891,7 +913,7 @@ abstract class DashboardBenchmarkItemStateBase<T extends DashboardBenchmarkItemB
         bump = index - range.start;
       }
       if (bump != 0) {
-        widget.range.value = RangeValues(range.start + bump, range.end + bump);
+        widget.range!.value = RangeValues(range.start + bump, range.end + bump);
       }
     }
   }
@@ -929,9 +951,7 @@ abstract class DashboardBenchmarkItemStateBase<T extends DashboardBenchmarkItemB
   void _onTap() {
     _locked = !_wasLocked;
     _wasLocked = false;
-    if (_cursor.value != null) {
-      _setSelected(_cursor.value.index, !_locked);
-    }
+    _setSelected(_cursor.value?.index, !_locked);
   }
 
   void _onDoubleTap() {
@@ -970,7 +990,7 @@ abstract class DashboardBenchmarkItemStateBase<T extends DashboardBenchmarkItemB
         ),
         Text(widget.label),
         if (_goalString != null)
-          Text(_goalString),
+          Text(_goalString!),
       ],
     );
   }
@@ -991,10 +1011,10 @@ class DashboardBenchmarkItemState extends DashboardBenchmarkItemStateBase<Dashbo
 
 class _DashboardItemSetPainter extends _DashboardItemPainterBase {
   _DashboardItemSetPainter({
-    @required this.averageBenchmark,
-    @required this.percent90Benchmark,
-    @required this.percent99Benchmark,
-    @required this.worstBenchmark,
+    required this.averageBenchmark,
+    required this.percent90Benchmark,
+    required this.percent99Benchmark,
+    required this.worstBenchmark,
     this.highlightIndex,
     this.range,
   }) : worst = _worstValueList(<Benchmark>[
@@ -1008,8 +1028,8 @@ class _DashboardItemSetPainter extends _DashboardItemPainterBase {
   final Benchmark percent90Benchmark;
   final Benchmark percent99Benchmark;
   final Benchmark worstBenchmark;
-  final int highlightIndex;
-  final RangeValues range;
+  final int? highlightIndex;
+  final RangeValues? range;
   final double worst;
 
   static double _worstValue(Benchmark benchmark) {
@@ -1041,7 +1061,7 @@ class _DashboardItemSetPainter extends _DashboardItemPainterBase {
     final Paint paint = Paint();
     if (highlightIndex != null) {
       paint.color = Colors.black;
-      _paintHighlight(canvas, size, paint, averageBenchmark, highlightIndex, range, false);
+      _paintHighlight(canvas, size, paint, averageBenchmark, highlightIndex!, range, false);
     }
     _paintSeries(canvas, size, paint, worstBenchmark,     range, worst, _validColor(Colors.red));
     _paintSeries(canvas, size, paint, percent99Benchmark, range, worst, _validColor(Colors.yellow));
@@ -1055,15 +1075,15 @@ class _DashboardItemSetPainter extends _DashboardItemPainterBase {
 
 class DashboardItemSetWidget extends DashboardBenchmarkItemBase {
   const DashboardItemSetWidget({
-    @required this.label,
-    @required this.averageBenchmark,
-    @required this.percent90Benchmark,
-    @required this.percent99Benchmark,
-    @required this.worstBenchmark,
-    Size size,
+    required this.label,
+    required this.averageBenchmark,
+    required this.percent90Benchmark,
+    required this.percent99Benchmark,
+    required this.worstBenchmark,
+    required Size size,
     bool isHistory = false,
-    ValueNotifier<RangeValues> range,
-    ValueNotifier<BenchmarkCursor> cursor,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
   }) : super(size: size, isHistory: isHistory, range: range, cursor: cursor);
 
   @override final String label;
@@ -1074,14 +1094,12 @@ class DashboardItemSetWidget extends DashboardBenchmarkItemBase {
 
   @override String get taskName => averageBenchmark.descriptor.taskName;
   @override int get valueCount => averageBenchmark.values.length;
-  @override double get goal => null;
-  @override double get baseline => null;
 
   @override
   Future<DashboardBenchmarkItemBase> makeDetail({
-    Size size,
-    ValueNotifier<RangeValues> range,
-    ValueNotifier<BenchmarkCursor> cursor,
+    required Size size,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
   }) async {
     final Future<Benchmark> historicalAverages  = averageBenchmark.getFullHistory(base: '');
     final Future<Benchmark> historicalPercent90 = percent90Benchmark.getFullHistory(base: '');
@@ -1106,7 +1124,7 @@ class DashboardItemSetWidget extends DashboardBenchmarkItemBase {
 
 class DashboardItemSetState extends DashboardBenchmarkItemStateBase<DashboardItemSetWidget> {
   @override Benchmark get main => widget.averageBenchmark;
-  @override String get _goalString => null;
+  @override String? get _goalString => null;
 
   @override CustomPainter get _painter => _DashboardItemSetPainter(
     averageBenchmark:   widget.averageBenchmark,
@@ -1114,6 +1132,95 @@ class DashboardItemSetState extends DashboardBenchmarkItemStateBase<DashboardIte
     percent99Benchmark: widget.percent99Benchmark,
     worstBenchmark:     widget.worstBenchmark,
     highlightIndex: widget.isHistory ? _cursor.value?.index : null,
+    range: widget.range?.value,
+  );
+}
+
+class _DashboardItemFramePainter extends _DashboardItemPainterBase {
+  _DashboardItemFramePainter({
+    required this.buildBenchmark,
+    required this.totalBenchmark,
+    this.highlightIndex,
+    this.range,
+  });
+
+  final Benchmark buildBenchmark;
+  final Benchmark totalBenchmark;
+  final int? highlightIndex;
+  final RangeValues? range;
+
+  Color Function(TimeSeriesValue) _validColor(Color c) =>
+          (TimeSeriesValue tsv) => tsv.dataMissing ? Colors.grey.shade200 : c;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint();
+    if (highlightIndex != null) {
+      paint.color = Colors.black;
+      _paintHighlight(canvas, size, paint, totalBenchmark, highlightIndex!, range, true);
+    }
+    _paintSeries(canvas, size, paint, totalBenchmark, range, totalBenchmark.worst, _validColor(Colors.green.shade200));
+    _paintSeries(canvas, size, paint, buildBenchmark, range, totalBenchmark.worst, _validColor(Colors.green));
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
+}
+
+class DashboardItemFrameWidget extends DashboardBenchmarkItemBase {
+  const DashboardItemFrameWidget({
+    required this.label,
+    required this.buildBenchmark,
+    required this.paintBenchmark,
+    required this.totalBenchmark,
+    required Size size,
+    bool isHistory = false,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
+  }) : super(size: size, isHistory: isHistory, range: range, cursor: cursor);
+
+  @override final String label;
+  final Benchmark buildBenchmark;
+  final Benchmark paintBenchmark;
+  final Benchmark totalBenchmark;
+
+  @override String get taskName => totalBenchmark.descriptor.taskName;
+  @override int get valueCount => totalBenchmark.values.length;
+
+  @override
+  Future<DashboardBenchmarkItemBase> makeDetail({
+    required Size size,
+    ValueNotifier<RangeValues?>? range,
+    ValueNotifier<BenchmarkCursor?>? cursor,
+  }) async {
+    final Benchmark historicalBuilds = await buildBenchmark.getFullHistory(base: '');
+    final Benchmark historicalPaints = await paintBenchmark.getFullHistory(base: '');
+    return DashboardItemFrameWidget(
+      label: label,
+      buildBenchmark: historicalBuilds,
+      paintBenchmark: historicalPaints,
+      totalBenchmark: historicalBuilds + historicalPaints,
+      size: size,
+      isHistory: true,
+      range: range,
+      cursor: cursor,
+    );
+  }
+
+  @override
+  State<StatefulWidget> createState() => DashboardItemFrameState();
+}
+
+class DashboardItemFrameState extends DashboardBenchmarkItemStateBase<DashboardItemFrameWidget> {
+  @override Benchmark get main => widget.totalBenchmark;
+
+  @override String get _goalString =>
+      'Goal: ${main.descriptor.goal}, Baseline: ${main.descriptor.baseline}';
+
+  @override CustomPainter get _painter => _DashboardItemFramePainter(
+    buildBenchmark: widget.buildBenchmark,
+    totalBenchmark: widget.totalBenchmark,
+    highlightIndex: _cursor.value?.index,
     range: widget.range?.value,
   );
 }

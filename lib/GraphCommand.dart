@@ -5,11 +5,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:args/args.dart';
+import 'package:http/http.dart' as http;
 import 'package:open_url/open_url.dart';
-import 'package:resource/resource.dart' show Resource;
+//import 'package:resource/resource.dart' show Resource;
 
 import 'GraphServer.dart';
 
@@ -24,14 +26,14 @@ abstract class GraphCommand {
 
   final String commandName;
   final bool webClientDefault;
-  bool verbose;
-  bool isWebClient;
+  late bool verbose;
+  late bool isWebClient;
 
-  ArgParser _argParser;
+  late final ArgParser _argParser = makeArgOptions();
 
   ArgParser makeArgOptions() {
     /// Common Command-line options for the `graphAB.dart` and 'graphTimeline.dart' commands.
-    return _argParser = ArgParser()
+    return ArgParser()
       ..addFlag(
         kLaunchOpt,
         defaultsTo: false,
@@ -64,7 +66,7 @@ abstract class GraphCommand {
 
   bool processResults(ArgResults args, List<GraphResult> results) {
     for (final String arg in args.rest) {
-      final List<GraphResult> fileResults = _validateJsonFile(arg, isWebClient);
+      final List<GraphResult>? fileResults = _validateJsonFile(arg, isWebClient);
       if (fileResults == null) {
         return false;
       }
@@ -73,7 +75,7 @@ abstract class GraphCommand {
     return true;
   }
 
-  String validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
+  String? validateJsonEntryIsNumberList(Map<String,dynamic> map, String key, [String outerKey = '']) {
     final dynamic val = map[key];
     if (val is List<num> || val is List<int> || val is List<double>) {
       return null;
@@ -89,7 +91,7 @@ abstract class GraphCommand {
     return '$outerKey[$key] is not a list: $val';
   }
 
-  String validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key) {
+  String? validateJsonEntryMapsStringToNumberList(Map<String,dynamic> jsonMap, String key) {
     final dynamic val = jsonMap[key];
     if (val == null) {
       return 'missing $key';
@@ -105,7 +107,7 @@ abstract class GraphCommand {
     }
     if (val is Map<String,List<dynamic>> || val is Map<String,dynamic>) {
       final Map<String,dynamic> map = val as Map<String,dynamic>;
-      String error;
+      String? error;
       for (final String subKey in map.keys) {
         error ??= validateJsonEntryIsNumberList(map, subKey);
       }
@@ -114,7 +116,7 @@ abstract class GraphCommand {
     return 'unrecognized $key: $val is not Map<String,List<num>>';
   }
 
-  String validateJsonEntryMatches(Map<String,dynamic> jsonMap, String key, String val) {
+  String? validateJsonEntryMatches(Map<String,dynamic> jsonMap, String key, String val) {
     if (jsonMap[key] != val) {
       return 'unrecognized $key: ${jsonMap[key]} != $val';
     }
@@ -123,7 +125,7 @@ abstract class GraphCommand {
 
   GraphResult validateJson(String filename, String json, Map<String,dynamic> jsonMap, bool webClient);
 
-  void usage(String error) {
+  void usage(String? error) {
     if (error != null) {
       exitCode = 1;
       stderr.writeln('');
@@ -134,7 +136,7 @@ abstract class GraphCommand {
     stderr.writeln(_argParser.usage);
   }
 
-  List<GraphResult> _validateJsonFile(String filename, bool webClient) {
+  List<GraphResult>? _validateJsonFile(String filename, bool webClient) {
     final File file = File(filename);
     if (!file.existsSync()) {
       usage('$filename does not exist');
@@ -146,7 +148,7 @@ abstract class GraphCommand {
         final String name = '$filename:${file.name}';
         if (file.name.endsWith('.json')) {
           if (fileContents.containsKey(name)) {
-            stderr.writeln('multiple conflicting entries in zip file for ${name}');
+            stderr.writeln('multiple conflicting entries in zip file for $name');
           } else {
             fileContents[name] = String.fromCharCodes(file.content as Iterable<int>);
           }
@@ -166,9 +168,6 @@ abstract class GraphCommand {
       final Map<String,dynamic> jsonMap = const JsonDecoder().convert(entry.value) as Map<String,dynamic>;
       try {
         final GraphResult result = validateJson(entry.key, entry.value, jsonMap, webClient);
-        if (result == null) {
-          return null;
-        }
         results.add(result);
       } catch (error) {
         usage('$filename is not a valid $commandName results json file: $error');
@@ -178,14 +177,16 @@ abstract class GraphCommand {
     return results;
   }
 
-  Archive _webAppArchive;
+  Archive? _webAppArchive;
 
   Future<Archive> _loadWebAppArchive() async {
     if (_webAppArchive == null) {
-      const Resource webAppResource = Resource('package:flutter_benchmark_utils/src/webapp.zip');
-      _webAppArchive = ZipDecoder().decodeBytes(await webAppResource.readAsBytes());
+      Uri? webappUri = await Isolate.resolvePackageUri(Uri.parse('package:flutter_benchmark_utils/src/webapp.zip'));
+      webappUri ??= Uri.base.resolve('src/webapp.zip');
+      final File webappFile = File.fromUri(webappUri);
+      _webAppArchive = ZipDecoder().decodeBytes(await webappFile.readAsBytes());
     }
-    return _webAppArchive;
+    return _webAppArchive!;
   }
 
   Future<bool> handleOther(HttpResponse response, String url) async {
@@ -212,7 +213,7 @@ abstract class GraphCommand {
   Future<bool> handleWebApp(HttpResponse response, String url) async {
     final String fileUrl = _stripVersioning(url);
     final Archive webAppArchive = await _loadWebAppArchive();
-    final ArchiveFile f = webAppArchive.findFile('webapp$fileUrl');
+    final ArchiveFile? f = webAppArchive.findFile('webapp$fileUrl');
     if (f == null) {
       return handleOther(response, url);
     }
@@ -224,7 +225,6 @@ abstract class GraphCommand {
   }
 
   Future<void> graphMain(List<String> rawArgs) async {
-    makeArgOptions();
     ArgResults args;
     try {
       args = _argParser.parse(rawArgs);
@@ -241,7 +241,7 @@ abstract class GraphCommand {
     }
 
     final List<ServedResults> servedUrls = <ServedResults>[];
-    Future<Process> webBuilder;
+    Future<Process>? webBuilder;
     if (args[kWebAppLocalOpt] as bool) {
       if (args[kWebAppOpt] as bool && !webClientDefault) {
         usage('Only one of --$kWebAppOpt or --$kWebAppLocalOpt flags allowed.');
@@ -312,7 +312,7 @@ abstract class GraphCommand {
     }
   }
 
-  Future<ServedResults> launchHtml(GraphResult results) async {
+  Future<ServedResults> launchHtml(GraphResult? results) async {
     final GraphServer server = GraphServer(
       graphHtmlName: '/$commandName.html',
       resultsScriptName: '/$commandName-results.js',
@@ -322,7 +322,7 @@ abstract class GraphCommand {
     return await server.initWebServer();
   }
 
-  String _webAppPath;
+  String? _webAppPath;
   String get webAppPath => _webAppPath ??= _findWebAppPath();
   String _findWebAppPath() {
     final Directory repo = File(Platform.script.path).parent.parent;

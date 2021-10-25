@@ -33,6 +33,7 @@ found in the LICENSE file. -->
       var kBenchmarkVersionValue = '1.0';
       var kLocalResultsName = 'local_engine_results';
       var kDefaultResultsName = 'default_results';
+      var kResultsCaption = 'caption';
 
       function validateJson(json_map, filename) {
         if (json_map[kBenchmarkTypeName] == kBenchmarkTypeValue &&
@@ -53,10 +54,14 @@ found in the LICENSE file. -->
         }
       }
 
+      function getResultKeys(results) {
+        return Object.keys(results).filter(key => key != 'caption');
+      }
+
       function combinedKeys(resultsA, resultsB) {
-        var combinedKeys = Object.keys(resultsA);
+        var combinedKeys = getResultKeys(resultsA);
         var insertIndex = 0;
-        Object.keys(resultsB).forEach((key) => {
+        getResultKeys(resultsB).forEach((key) => {
           var index = combinedKeys.indexOf(key);
           if (index < 0) {
             combinedKeys.splice(insertIndex++, 0, key);
@@ -106,11 +111,15 @@ found in the LICENSE file. -->
       function makeChartFromType(type, localResults, defaultResults) {
         var localTimes = localResults[type];
         var defaultTimes = defaultResults[type];
+        var localName = localResults[kResultsCaption];
+        var defaultName = defaultResults[kResultsCaption];
         if (localTimes || defaultTimes) {
+          if (!localName) localName = 'local engine';
+          if (!defaultName) defaultName = 'default engine';
           return makeDiv(
             'results_' + type,
             'padding: 5px; border-color: #black;',
-            makeChart(localTimes, defaultTimes, type),
+            makeChart(localTimes, localName, defaultTimes, defaultName, type),
             makeDiv(
               'controls_' + type,
               'padding-top: 10px;',
@@ -124,7 +133,7 @@ found in the LICENSE file. -->
         return null;
       }
 
-      function makeChart(localTimes, defaultTimes, resultsType) {
+      function makeChart(localTimes, localName, defaultTimes, defaultName, resultsType) {
         var data = new google.visualization.DataTable();
         data.addColumn('string', '');
         var len = Math.max(localTimes ? localTimes.length : 0,
@@ -133,10 +142,10 @@ found in the LICENSE file. -->
           data.addColumn('number', 'Run '+(i+1));
         }
         if (localTimes) {
-          data.addRow([ 'local engine',   ...localTimes ]);
+          data.addRow([ localName,   ...localTimes ]);
         }
         if (defaultTimes) {
-          data.addRow([ 'default engine', ...defaultTimes ]);
+          data.addRow([ defaultName, ...defaultTimes ]);
         }
 
         var options = {

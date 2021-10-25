@@ -5,7 +5,7 @@ function usage {
   echo "install.sh [ -n | --no-build ]"
   echo
   echo This command cleans and rebuilds the web app with the ClientKit option. It must be run
-  must from either the main directory of the graph_app package or one of its direct subdirectories.
+  echo from either the main directory of the graph_app package or one of its direct subdirectories.
   echo
   echo "--no-build (-n)   Do not force a rebuild of the app"
   echo
@@ -41,13 +41,14 @@ do
 done
 
 # Relative directories for our source files and destination archive
-SRC_EXAMPLE_FILE=lib/timeline_summary_graphing.dart
+SRC_EXAMPLE_FILE=lib/series_graphing.dart
 
 if [ -f $SRC_EXAMPLE_FILE ]; then
   REPO_DIR=.
 elif [ -f ../$SRC_EXAMPLE_FILE ]; then
   REPO_DIR=..
 else
+  echo Could not find sample file: $SRC_EXAMPLE_FILE
   usage
 fi
 
@@ -57,7 +58,7 @@ if [ $BUILD == true ]; then
   echo "---" Cleaning build
   (cd $REPO_DIR; flutter clean)
   echo "---" Building web app with ClientKit
-  (cd $REPO_DIR; flutter build web --dart-define=FLUTTER_WEB_USE_SKIA=true)
+  (cd $REPO_DIR; flutter build web --web-renderer canvaskit)
 else
   check_dir $BUILD_DIR
 fi

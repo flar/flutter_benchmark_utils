@@ -8,19 +8,17 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 0.0.42
 
 environment:
-  sdk: ">=2.7.0 <3.0.0"
+  sdk: ">=2.12.0-0 <3.0.0"
 
 dependencies:
-  http: 0.12.2
-  open_url: 1.0.1
-
   flutter:
     sdk: flutter
 
   flutter_benchmark_utils:
     path: ../..
 
-dev_dependencies:
+  http: ^0.13.0
+  open_url: ^2.0.0-nullsafety
 
 flutter:
   uses-material-design: true

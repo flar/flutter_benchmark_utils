@@ -8,39 +8,32 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
+@immutable
 class TimeSeriesDescriptor {
   factory TimeSeriesDescriptor.fromJsonMap(Map<String,dynamic> jsonMap) {
     final Map<String,dynamic> seriesMap = jsonMap['Timeseries'] as Map<String,dynamic>;
     return TimeSeriesDescriptor._(
       archived: seriesMap['Archived'] as bool,
-      baseline: seriesMap['Baseline'] as double,
-      goal:     seriesMap['Goal'] as double,
+      baseline: seriesMap['Baseline'] as double? ?? 0.0,
+      goal:     seriesMap['Goal'] as double? ?? 0.0,
       id:       seriesMap['ID'] as String,
       label:    seriesMap['Label'] as String,
-      taskName: seriesMap['TaskName'] as String,
+      taskName: seriesMap['TaskName'] as String? ?? 'Unknown task',
       units:    seriesMap['Unit'] as String,
       key:      jsonMap['Key'] as String,
     );
   }
 
-  TimeSeriesDescriptor._({
-    @required this.archived,
-    @required this.baseline,
-    @required this.goal,
-    @required this.id,
-    @required this.label,
-    @required this.taskName,
-    @required this.units,
-    @required this.key,
-  })
-      : assert(archived != null),
-        assert(baseline != null),
-        assert(goal != null),
-        assert(id != null),
-        assert(label != null),
-        assert(taskName != null),
-        assert(units != null),
-        assert(key != null);
+  const TimeSeriesDescriptor._({
+    required this.archived,
+    required this.baseline,
+    required this.goal,
+    required this.id,
+    required this.label,
+    required this.taskName,
+    required this.units,
+    required this.key,
+  });
 
   final bool archived;
   final double baseline;
@@ -55,18 +48,18 @@ class TimeSeriesDescriptor {
 class TimeSeriesValue {
   factory TimeSeriesValue.fromJsonMap(Map<String,dynamic> jsonMap) => TimeSeriesValue._(
     dataMissing:     jsonMap['DataMissing'] as bool,
-    value:           jsonMap['Value'] as double,
+    value:           jsonMap['Value'] as double? ?? 0.0,
     createTimestamp: DateTime.fromMillisecondsSinceEpoch(jsonMap['CreateTimestamp'] as int),
-    taskKey:         jsonMap['TaskKey'] as String,
-    revision:        jsonMap['Revision'] as String,
+    taskKey:         jsonMap['TaskKey'] as String? ?? 'Missing task key',
+    revision:        jsonMap['Revision'] as String? ?? 'Missing revision',
   );
 
   TimeSeriesValue._({
-    @required this.dataMissing,
-    @required this.value,
-    @required this.createTimestamp,
-    @required this.taskKey,
-    @required this.revision,
+    required this.dataMissing,
+    required this.value,
+    required this.createTimestamp,
+    required this.taskKey,
+    required this.revision,
   });
 
   final bool dataMissing;
@@ -74,6 +67,20 @@ class TimeSeriesValue {
   final DateTime createTimestamp;
   final String taskKey;
   final String revision;
+
+  TimeSeriesValue operator+ (TimeSeriesValue other) {
+    assert(dataMissing == other.dataMissing);
+    assert(createTimestamp == other.createTimestamp);
+    assert(taskKey == other.taskKey);
+    assert(revision == other.revision);
+    return dataMissing ? this : TimeSeriesValue._(
+      dataMissing: false,
+      value: value + other.value,
+      createTimestamp: createTimestamp,
+      taskKey: taskKey,
+      revision: revision,
+    );
+  }
 
   @override
   String toString() => dataMissing ? 'N/A' : '${value.toStringAsFixed(1)}ms';
@@ -86,8 +93,8 @@ class Benchmark {
       jsonMap['Timeseries'] as Map<String,dynamic>,
     );
     final List<dynamic> valueJsonList = jsonMap['Values'] as List<dynamic>;
-    final List<TimeSeriesValue> values =
-    valueJsonList.map((dynamic e) => TimeSeriesValue.fromJsonMap(e as Map<String,dynamic>))
+    final List<TimeSeriesValue> values = valueJsonList
+        .map((dynamic e) => TimeSeriesValue.fromJsonMap(e as Map<String,dynamic>))
         .toList();
     return Benchmark._(
       descriptor: descriptor,
@@ -104,9 +111,9 @@ class Benchmark {
       Benchmark.fromJsonMap(const JsonDecoder().convert(jsonBody) as Map<String,dynamic>);
 
   Benchmark._({
-    @required this.descriptor,
-    @required this.values,
-    @required this.worst,
+    required this.descriptor,
+    required this.values,
+    required this.worst,
   });
 
   final TimeSeriesDescriptor descriptor;
@@ -116,11 +123,59 @@ class Benchmark {
   bool get archived => descriptor.archived;
   String get task => descriptor.taskName;
 
+  static String _combineLabels(String labelA, String labelB) {
+    int start = 0;
+    while (start < labelA.length && start < labelB.length) {
+      if (labelA[start] != labelB[start])
+        break;
+      start++;
+    }
+
+    int endA = labelA.length;
+    int endB = labelB.length;
+    while (endA > start && endB > start) {
+      if (labelA[endA - 1] != labelB[endB - 1])
+        break;
+      endA--;
+      endB--;
+    }
+
+    final String prefix = labelA.substring(0, start);
+    final String middleA = labelA.substring(start, endA);
+    final String middleB = labelB.substring(start, endB);
+    final String suffix = labelB.substring(endB);
+    return '$prefix[$middleA+$middleB]$suffix';
+  }
+
+  Benchmark operator+ (Benchmark other) {
+    assert(descriptor.archived == other.descriptor.archived);
+//    assert(descriptor.key == other.descriptor.key); // must not match
+//    assert(descriptor.label == other.descriptor.label); // should be different
+    assert(descriptor.taskName == other.descriptor.taskName);
+    assert(descriptor.units == other.descriptor.units);
+    assert(descriptor.id == other.descriptor.id);
+    assert(values.length == other.values.length);
+    return Benchmark._(
+      descriptor: TimeSeriesDescriptor._(
+        archived: descriptor.archived,
+        baseline: descriptor.baseline + other.descriptor.baseline,
+        goal: descriptor.goal + other.descriptor.goal,
+        id: 'Unknown',
+        label: _combineLabels(descriptor.label, other.descriptor.label),
+        taskName: descriptor.taskName,
+        units: descriptor.units,
+        key: 'Unknown',
+      ),
+      values: List<TimeSeriesValue>.generate(values.length, (int i) => values[i] + other.values[i]),
+      worst: worst + other.worst,
+    );
+  }
+
   Future<Benchmark> getFullHistory({String base = BenchmarkDashboard.dashboardUrlBase}) async {
     final String url = BenchmarkDashboard.dashboardGetHistoryUrl(descriptor.key, base: base);
     print('loading benchmark history from $url');
     try {
-      final http.Response response = await http.get(url);
+      final http.Response response = await http.get(Uri.parse(url));
       return Benchmark.fromJsonString(response.body);
     } finally {
       print('done loading');
@@ -129,23 +184,24 @@ class Benchmark {
 }
 
 class BenchmarkDashboard {
-  BenchmarkDashboard.fromJsonString(String jsonBody)
-      : this.fromJsonMap(const JsonDecoder().convert(jsonBody) as Map<String,dynamic>);
+  factory BenchmarkDashboard.fromJsonString(String jsonBody) =>
+      BenchmarkDashboard.fromJsonMap(const JsonDecoder().convert(jsonBody) as Map<String,dynamic>);
 
-  BenchmarkDashboard.fromJsonMap(Map<String,dynamic> jsonMap) {
+  factory BenchmarkDashboard.fromJsonMap(Map<String,dynamic> jsonMap) {
     final List<dynamic> benchmarkJsonList = jsonMap['Benchmarks'] as List<dynamic>;
     final List<Benchmark> benchmarks = benchmarkJsonList.map(_benchmarkFromJson).toList();
     final Map<String,List<Benchmark>> byTask = <String,List<Benchmark>>{};
     for (final Benchmark benchmark in benchmarks) {
-      List<Benchmark> associatedBenchmarks = byTask[benchmark.task];
+      List<Benchmark>? associatedBenchmarks = byTask[benchmark.task];
       if (associatedBenchmarks == null) {
         byTask[benchmark.task] = associatedBenchmarks = <Benchmark>[];
       }
       associatedBenchmarks.add(benchmark);
     }
-    _allEntries = benchmarks;
-    _byTask = byTask;
+    return BenchmarkDashboard._(benchmarks, byTask);
   }
+
+  BenchmarkDashboard._(this._allEntries, this._byTask);
 
   static const String dashboardUrlBase =
       'https://flutter-dashboard.appspot.com/api/public';
@@ -163,7 +219,7 @@ class BenchmarkDashboard {
   static Future<BenchmarkDashboard> loadFromAppspot() async {
     print('loading benchmarks from $dashboardGetBenchmarksUrl');
     try {
-      final http.Response response = await http.get(dashboardGetBenchmarksUrl);
+      final http.Response response = await http.get(Uri.parse(dashboardGetBenchmarksUrl));
       return BenchmarkDashboard.fromJsonString(response.body);
     } finally {
       print('done loading');

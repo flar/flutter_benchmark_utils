@@ -5,12 +5,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_benchmark_utils/benchmark_data.dart';
 import 'package:open_url/open_url.dart';
 import 'package:http/http.dart' as http;
-import 'package:meta/meta.dart';
-import 'package:resource/resource.dart' show Resource;
+//import 'package:resource/resource.dart' show Resource;
 
 const String kPackagePrefix = 'package:flutter_benchmark_utils/src/';
 const List<String> kStandardScripts = <String>[
@@ -49,19 +49,19 @@ class GraphResult {
   Future<String> _lazyLoad() async {
     print('loading lazy resource from $_lazySource');
     try {
-      final http.Response response = await http.get(_lazySource);
+      final http.Response response = await http.get(Uri.parse(_lazySource!));
       print('done loading');
       return response.body;
     } catch (e) {
       print('caught error while loading: $e');
     }
-    return null;
+    return '{}';
   }
 
   final BenchmarkType type;
   final String filename;
-  final String _lazySource;
-  String _json;
+  final String? _lazySource;
+  String? _json;
 
   String get webKey => '$type:$filename';
   Future<String> get json async => _json ?? await _lazyLoad();
@@ -111,9 +111,11 @@ class _FileRequestHandler extends _RequestHandler {
 
   @override
   Future<void> handle(HttpResponse response, String uri) async {
-    final Resource fileResource = Resource('$packagePrefix$uri');
+    Uri? resourceUri = await Isolate.resolvePackageUri(Uri.parse('$packagePrefix$uri'));
+    resourceUri ??= Uri.base.resolve(uri);
+    final File resourceFile = File.fromUri(resourceUri);
     response.headers.contentType = _typeFor(uri);
-    response.write(await fileResource.readAsString());
+    response.write(await resourceFile.readAsString());
     await response.close();
   }
 }
@@ -140,29 +142,26 @@ class _ResultsRequestHandler extends _StringRequestHandler {
 }
 
 class GraphServer {
-  GraphServer(
-      {
-        @required this.graphHtmlName,
-        @required this.resultsScriptName,
-        @required this.resultsVariableName,
-        @required this.results,
-      })
-      : assert(graphHtmlName != null),
-        assert(resultsScriptName != null),
-        assert(resultsVariableName != null),
-        assert(results != null);
+  GraphServer({
+    required this.graphHtmlName,
+    required this.resultsScriptName,
+    required this.resultsVariableName,
+    this.results,
+  });
 
   final String graphHtmlName;
   final String resultsScriptName;
   final String resultsVariableName;
-  final GraphResult results;
+  final GraphResult? results;
 
   Future<ServedResults> initWebServer() async {
     final Map<String,_RequestHandler> responseMap = <String, _RequestHandler> {
       '/': _DefaultRequestHandler(kPackagePrefix, graphHtmlName),
       '/favicon.ico': _IgnoreRequestHandler(),
       graphHtmlName: _FileRequestHandler(kPackagePrefix),
-      resultsScriptName: _ResultsRequestHandler(resultsVariableName, results.filename, await results.json),
+      resultsScriptName: _ResultsRequestHandler(resultsVariableName,
+          results?.filename ?? 'No data',
+          await results?.json ?? '{}'),
       for (String script in kStandardScripts)
         script: _FileRequestHandler(kPackagePrefix),
     };
@@ -173,7 +172,7 @@ class GraphServer {
     );
 
     webServer.listen((HttpRequest request) async {
-      final _RequestHandler handler = responseMap[request.uri.toString()];
+      final _RequestHandler? handler = responseMap[request.uri.toString()];
       if (handler != null) {
         await handler.handle(request.response, request.uri.toString());
       } else {
@@ -184,19 +183,20 @@ class GraphServer {
     });
 
     final String serverUrl = 'http://localhost:${webServer.port}';
-    return ServedResults(results == null ? 'page' : results.filename, serverUrl);
+    return ServedResults(results?.filename ?? 'page', serverUrl);
   }
 }
 
 Future<ServedResults> serveToWebApp({
-  List<GraphResult> results,
-  Future<bool> handler(HttpResponse response, String uri),
-  bool verbose,
+  required List<GraphResult> results,
+  required Future<bool> handler(HttpResponse response, String uri),
+  bool verbose = false,
 }) async {
   final Map<String,GraphResult> resultMap = <String,GraphResult>{};
   for (final GraphResult result in results) {
-    if (resultMap.containsKey(result.filename)) {
-      if (resultMap[result.filename].sameSource(result)) {
+    final GraphResult? prevResult = resultMap[result.filename];
+    if (prevResult != null) {
+      if (prevResult.sameSource(result)) {
         stderr.writeln('Ignoring duplicate results added for ${result.filename}');
       } else {
         stderr.writeln('Conflicting results added for ${result.filename}');
@@ -211,7 +211,7 @@ Future<ServedResults> serveToWebApp({
     request.response.headers.set('access-control-allow-origin', '*');
     String uri = request.uri.toString();
     if (uri == '/list') {
-      final List<String> filenames = resultMap.keys.map((String key) => resultMap[key].webKey).toList();
+      final List<String> filenames = resultMap.values.map((GraphResult result) => result.webKey).toList();
       final String filenameJson = const JsonEncoder.withIndent('  ').convert(filenames);
       request.response.headers.contentType = ContentType.json;
       request.response.headers.contentLength = filenameJson.length;
@@ -220,7 +220,7 @@ Future<ServedResults> serveToWebApp({
     } else if (uri.startsWith('/result?')) {
       final String key = uri.substring(8);
       if (resultMap.containsKey(key)) {
-        final String content = await resultMap[key].json;
+        final String content = await resultMap[key]!.json;
         final List<int> encoded = request.response.encoding.encoder.convert(content);
         request.response.headers.contentType = ContentType.json;
         request.response.headers.contentLength = encoded.length;

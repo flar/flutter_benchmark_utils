@@ -4,82 +4,6 @@
 
 import 'package:meta/meta.dart';
 
-abstract class TimeValUnit {
-  factory TimeValUnit.percentageOf(TimeFrame run) => _TimeValUnitPercent(run);
-
-  factory TimeValUnit.forUnits(String units) {
-    switch (units) {
-      case 's':  return seconds;
-      case 'ms': return millis;
-      case 'us': return micros;
-      case 'ns': return nanos;
-      case '%':  throw 'Cannot determine percentage units for time without a TimeFrame';
-    }
-    throw 'Unrecognized time units: $units';
-  }
-
-  static const TimeValUnit seconds = _TimeValUnitSeconds();
-  static const TimeValUnit millis  = _TimeValUnitMillis();
-  static const TimeValUnit micros  = _TimeValUnitMicros();
-  static const TimeValUnit nanos   = _TimeValUnitNanos();
-
-  String get units;
-
-  double getValue(TimeVal tv);
-  String getValueString(TimeVal tv, [int digits = 3]);
-}
-
-class _TimeValUnitPercent implements TimeValUnit {
-  _TimeValUnitPercent(this._run);
-
-  final TimeFrame _run;
-
-  @override String get units => '%';
-
-  @override double getValue(TimeVal tv) => _run.getFraction(tv);
-  @override String getValueString(TimeVal tv, [int digits = 3]) => '${getValue(tv).toStringAsFixed(digits)}%';
-}
-
-@immutable
-class _TimeValUnitSeconds implements TimeValUnit {
-  const _TimeValUnitSeconds();
-
-  @override String get units => 's';
-
-  @override double getValue(TimeVal tv) => tv.seconds;
-  @override String getValueString(TimeVal tv, [int digits = 3]) => tv.stringSeconds(digits);
-}
-
-@immutable
-class _TimeValUnitMillis implements TimeValUnit {
-  const _TimeValUnitMillis();
-
-  @override String get units => 'ms';
-
-  @override double getValue(TimeVal tv) => tv.millis;
-  @override String getValueString(TimeVal tv, [int digits = 3]) => tv.stringMillis(digits);
-}
-
-@immutable
-class _TimeValUnitMicros implements TimeValUnit {
-  const _TimeValUnitMicros();
-
-  @override String get units => 'us';
-
-  @override double getValue(TimeVal tv) => tv.micros;
-  @override String getValueString(TimeVal tv, [int digits = 3]) => tv.stringMicros(digits);
-}
-
-@immutable
-class _TimeValUnitNanos implements TimeValUnit {
-  const _TimeValUnitNanos();
-
-  @override String get units => 'ns';
-
-  @override double getValue(TimeVal tv) => tv.nanos;
-  @override String getValueString(TimeVal tv, [int digits = 3]) => tv.stringNanos(digits);
-}
-
 @immutable
 class TimeVal implements Comparable<TimeVal> {
   const TimeVal._(double nanos) : _nanos = nanos;
@@ -150,13 +74,17 @@ class TimeVal implements Comparable<TimeVal> {
 
 @immutable
 class TimeFrame {
-  TimeFrame({@required this.start, TimeVal end, TimeVal duration})
-      : assert(start != null),
-        assert((end == null) != (duration == null)),
-        end = end ?? start + duration,
-        duration = duration ?? end - start,
-        assert(duration.isNonNegative),
-        assert(start + duration == end);
+  TimeFrame({
+    required this.start,
+    TimeVal? end,
+    TimeVal? duration,
+  })
+      : assert((end == null) != (duration == null)),
+        end = end ?? start + duration!,
+        duration = duration ?? end! - start {
+    assert(this.duration.isNonNegative);
+    assert(start + this.duration == this.end);
+  }
 
   const TimeFrame._(this.start, this.end, this.duration);
 

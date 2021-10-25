@@ -45,7 +45,7 @@ class DashboardGraphCommand extends GraphCommand {
 
   @override
   GraphResult validateJson(String filename, String json, Map<String, dynamic> jsonMap, bool isWebClient) {
-    BenchmarkType type = BenchmarkUtils.getBenchmarkType(jsonMap);
+    BenchmarkType? type = BenchmarkUtils.getBenchmarkType(jsonMap);
     switch (type) {
       case BenchmarkType.BENCHMARK_DASHBOARD:
         type = BenchmarkType.BENCHMARK_DASHBOARD;
@@ -59,13 +59,13 @@ class DashboardGraphCommand extends GraphCommand {
   @override
   Future<bool> handleOther(HttpResponse response, String url) async {
     if (url.startsWith('/get-timeseries-history?TimeSeriesKey=')) {
-      final String queryUrl = '${BenchmarkDashboard.dashboardUrlBase}/get-timeseries-history';
+      const String queryUrl = '${BenchmarkDashboard.dashboardUrlBase}/get-timeseries-history';
       final Map<String, dynamic> request = <String, dynamic>{
         'TimeSeriesKey': url.substring(38),
       };
       print('loading lazy resource from $queryUrl');
       try {
-        final http.Response queryResponse = await http.post(queryUrl, body: json.encode(request));
+        final http.Response queryResponse = await http.post(Uri.parse(queryUrl), body: json.encode(request));
         final List<int> encoded = response.encoding.encoder.convert(queryResponse.body);
         response.headers.contentType = ContentType.json;
         response.headers.contentLength = encoded.length;

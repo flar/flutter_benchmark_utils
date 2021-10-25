@@ -11,7 +11,7 @@ class TimelineGraphCommand extends GraphCommand {
 
   @override
   GraphResult validateJson(String filename, String json, Map<String, dynamic> jsonMap, bool isWebClient) {
-    BenchmarkType type = BenchmarkUtils.getBenchmarkType(jsonMap);
+    BenchmarkType? type = BenchmarkUtils.getBenchmarkType(jsonMap);
     switch (type) {
       case BenchmarkType.TIMELINE_SUMMARY:
         break;
@@ -24,7 +24,7 @@ class TimelineGraphCommand extends GraphCommand {
       default:
         throw 'Not recognized as a timeline summary or event trace';
     }
-    return GraphResult(type, filename, json);
+    return GraphResult(type!, filename, json);
   }
 }
 

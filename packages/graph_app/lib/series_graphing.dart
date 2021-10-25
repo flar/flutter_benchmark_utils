@@ -17,59 +17,53 @@ final List<Color> heatColors = <Color>[
   Colors.red,
 ];
 
-class TimelineResultsGraphWidget extends StatefulWidget {
-  const TimelineResultsGraphWidget(this.results)
-      : assert(results != null);
+class SeriesSourceGraphWidget extends StatefulWidget {
+  const SeriesSourceGraphWidget(this.source);
 
-  final TimelineResults results;
+  final GraphableSeriesSource source;
 
   @override
-  State createState() => TimelineResultsGraphWidgetState();
+  State createState() => SeriesSourceGraphWidgetState();
 }
 
-class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> {
-  ScrollController _controller;
-  List<TimelineGraphWidget> _graphs;
+class SeriesSourceGraphWidgetState extends State<SeriesSourceGraphWidget> {
+  ScrollController? _controller;
+  late List<SeriesGraphWidget> _graphWidgets;
 
   @override
   void initState() {
     super.initState();
     _controller = ScrollController();
-    _graphs = <TimelineGraphWidget>[
-      TimelineGraphWidget(widget.results.buildData, _closeGraph),
-      TimelineGraphWidget(widget.results.renderData, _closeGraph),
-    ];
+    _graphWidgets = widget.source.defaultGraphs.map(_widgetFor).toList();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 
-  void _closeGraph(TimelineGraphWidget graph) {
-    setState(() => _graphs.remove(graph));
+  void _closeGraph(SeriesGraphWidget widget) {
+    setState(() => _graphWidgets.remove(widget));
   }
 
-  void _addGraph(String measurement) {
-    final TimelineThreadResults results = widget.results.getResults(measurement);
-    final TimelineGraphWidget graph = TimelineGraphWidget(results, _closeGraph);
-    setState(() => _graphs.add(graph));
+  SeriesGraphWidget _widgetFor(GraphableSeries series) {
+    return SeriesGraphWidget(series, _closeGraph);
   }
 
-  bool isGraphed(String measurement) {
-    for (final TimelineGraphWidget graph in _graphs) {
-      if (graph.timeline.titleName == measurement) {
-        return true;
-      }
-    }
-    return false;
+  void _addGraph(String seriesName) {
+    setState(() => _graphWidgets.add(_widgetFor(widget.source.seriesFor(seriesName))));
   }
-  bool isNotGraphed(String measurement) => !isGraphed(measurement);
+
+  bool isGraphed(String seriesName) {
+    return _graphWidgets.any((SeriesGraphWidget graph) => graph.series.titleName == seriesName);
+  }
+  bool isNotGraphed(String seriesName) => !isGraphed(seriesName);
 
   @override
   Widget build(BuildContext context) {
-    final Iterable<String> remainingMeasurements = widget.results.measurements.where(isNotGraphed);
+    final Iterable<String> remainingSeriesNames = widget.source.allSeriesNames.where(isNotGraphed);
     return Stack(
       children: <Widget>[
         Container(
@@ -79,14 +73,14 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                for (TimelineGraphWidget graph in _graphs)
+                for (SeriesGraphWidget graph in _graphWidgets)
                   Container(
                     margin: const EdgeInsets.only(top: 20, bottom: 20),
                     child: graph,
                   ),
                 Container(
                   margin: const EdgeInsets.only(top: 20, bottom: 20),
-                  child: TimelineGraphAdditionalWidget(remainingMeasurements, _addGraph),
+                  child: AdditionalSeriesWidget(remainingSeriesNames, _addGraph),
                 ),
               ],
             ),
@@ -97,23 +91,28 @@ class TimelineResultsGraphWidgetState extends State<TimelineResultsGraphWidget> 
   }
 }
 
-class TimelineGraphAdditionalWidget extends StatelessWidget {
-  const TimelineGraphAdditionalWidget(this.measurements, this.addCallback);
+class AdditionalSeriesWidget extends StatelessWidget {
+  const AdditionalSeriesWidget(this.seriesNames, this.addCallback);
 
-  final Iterable<String> measurements;
-  final Function(String) addCallback;
+  final Iterable<String> seriesNames;
+  final void Function(String)? addCallback;
 
+  void _callback(String? name) {
+    if (name != null && addCallback != null) {
+      addCallback!(name);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Column(
       children: <Widget>[
         DropdownButton<String>(
           icon: const Icon(Icons.add),
-          onChanged: addCallback,
+          onChanged:  addCallback == null ? null : _callback,
           hint: const Text('Add a new graph'),
           items: <DropdownMenuItem<String>>[
-            for (String measurement in measurements)
-              DropdownMenuItem<String>(value: measurement, child: Text(measurement)),
+            for (String name in seriesNames)
+              DropdownMenuItem<String>(value: name, child: Text(name)),
           ],
         ),
       ],
@@ -121,23 +120,23 @@ class TimelineGraphAdditionalWidget extends StatelessWidget {
   }
 }
 
-abstract class TimelineAxisPainter extends CustomPainter {
-  TimelineAxisPainter({
-    this.rangeMin,
-    this.rangeMax,
-    this.units,
-    this.horizontal,
-    int minTicks,
-    int maxTicks,
+abstract class GraphAxisPainter extends CustomPainter {
+  GraphAxisPainter({
+    required this.rangeMin,
+    required this.rangeMax,
+    required this.horizontal,
+    required int minTicks,
+    required int maxTicks,
   })
-      : ticks = makeTicks(rangeMin, rangeMax, _optimalTickUnit(rangeMin, rangeMax, 1.0, minTicks, maxTicks));
+      : ticks = makeTicks(rangeMin, rangeMax, _optimalTickUnit(rangeMin.value, rangeMax.value, 1.0, minTicks, maxTicks));
 
-  static List<double> makeTicks(double rangeMin, double rangeMax, double tickUnit) {
-    final double minTick = (rangeMin / tickUnit).floorToDouble() + 1;
-    final double maxTick = (rangeMax / tickUnit).ceilToDouble()  - 1;
-    return <double>[
+  static List<UnitValue> makeTicks(UnitValue rangeMin, UnitValue rangeMax, double tickUnit) {
+    final double minTick = (rangeMin.value / tickUnit).floorToDouble() + 1;
+    final double maxTick = (rangeMax.value / tickUnit).ceilToDouble()  - 1;
+    final Units units = rangeMin.units;
+    return <UnitValue>[
       for (double t = minTick; t <= maxTick; t++)
-        tickUnit * t,
+        units.value(tickUnit * t),
     ];
   }
 
@@ -164,21 +163,20 @@ abstract class TimelineAxisPainter extends CustomPainter {
     return maxTick - minTick + 1;
   }
 
-  final double rangeMin;
-  final double rangeMax;
-  final String units;
+  final UnitValue rangeMin;
+  final UnitValue rangeMax;
   final bool horizontal;
-  final List<double> ticks;
+  final List<UnitValue> ticks;
 
-  String _formatTick(double v) {
-    String str = v.toStringAsFixed(3);
-    if (str.contains('.')) {
-      while (str.endsWith('00')) {
-        str = str.substring(0, str.length - 1);
-      }
-    }
-    return str;
-  }
+  // String _formatTick(double v) {
+  //   String str = v.toStringAsFixed(3);
+  //   if (str.contains('.')) {
+  //     while (str.endsWith('00')) {
+  //       str = str.substring(0, str.length - 1);
+  //     }
+  //   }
+  //   return str;
+  // }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -187,8 +185,10 @@ abstract class TimelineAxisPainter extends CustomPainter {
     const TextStyle style = TextStyle(
       color: Colors.black,
     );
-    for (final double t in ticks) {
-      final double fraction = (t - rangeMin) / (rangeMax - rangeMin);
+    final Units units = rangeMin.units;
+    final UnitValueFormatter formatter = units.rangeFormatter(rangeMin, rangeMax);
+    for (final UnitValue t in ticks) {
+      final double fraction = (t.value - rangeMin.value) / (rangeMax.value - rangeMin.value);
       double x, y;
       if (horizontal) {
         x = fraction * size.width;
@@ -199,7 +199,7 @@ abstract class TimelineAxisPainter extends CustomPainter {
         y = (1.0 - fraction) * size.height;
         canvas.drawLine(Offset(5, y), Offset(10, y), paint);
       }
-      final String label = '${_formatTick(t)}$units';
+      final String label = formatter.format(t, precision: 3);
       final TextSpan span = TextSpan(text: label, style: style);
       final TextPainter textPainter = TextPainter(text: span);
       textPainter.layout();
@@ -216,33 +216,30 @@ abstract class TimelineAxisPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineHAxisTimePainter extends TimelineAxisPainter {
-  TimelineHAxisTimePainter(TimelineGraphPainter graphPainter) : super(
-    rangeMin: graphPainter.run.duration.seconds * graphPainter.zoom.left,
-    rangeMax: graphPainter.run.duration.seconds * graphPainter.zoom.right,
-    units: 's',
+class GraphHAxisTimePainter extends GraphAxisPainter {
+  GraphHAxisTimePainter(TimeFrame run, Rect zoom) : super(
+    rangeMin: TimeUnits.seconds(run.duration.seconds * zoom.left),
+    rangeMax: TimeUnits.seconds(run.duration.seconds * zoom.right),
     horizontal: true,
     minTicks: 10,
     maxTicks: 25,
   );
 }
 
-class TimelineVAxisDurationPainter extends TimelineAxisPainter {
-  TimelineVAxisDurationPainter(TimelinePainter graphPainter) : super(
-    rangeMin: graphPainter.timeline.maxValue * (1 - graphPainter.zoom.bottom),
-    rangeMax: graphPainter.timeline.maxValue * (1 - graphPainter.zoom.top),
-    units: graphPainter.timeline.frames.first.reading.units,
+class GraphVAxisDurationPainter extends GraphAxisPainter {
+  GraphVAxisDurationPainter(SeriesPainter graphPainter) : super(
+    rangeMin: graphPainter.series.maxValue * (1 - graphPainter.zoom.bottom),
+    rangeMax: graphPainter.series.maxValue * (1 - graphPainter.zoom.top),
     horizontal: false,
     minTicks: 4,
     maxTicks: 10,
   );
 }
 
-class TimelineAxisPercentPainter extends TimelineAxisPainter {
-  TimelineAxisPercentPainter(Rect view, bool horizontal) : super(
-    rangeMin: 100 * (horizontal ? view.left : view.top),
-    rangeMax: 100 * (horizontal ? view.right : view.bottom),
-    units: '%',
+class GraphAxisPercentPainter extends GraphAxisPainter {
+  GraphAxisPercentPainter(Rect view, bool horizontal) : super(
+    rangeMin: PercentUnits.fraction(horizontal ? view.left : view.top),
+    rangeMax: PercentUnits.fraction(horizontal ? view.right : view.bottom),
     horizontal: horizontal,
     minTicks: 4,
     maxTicks: 10,
@@ -251,50 +248,96 @@ class TimelineAxisPercentPainter extends TimelineAxisPainter {
 
 const Rect unitRect = Rect.fromLTRB(0, 0, 1, 1);
 
-abstract class TimelinePainter extends CustomPainter {
-  TimelinePainter(this.timeline, [this.zoom = unitRect]);
+abstract class SeriesPainter extends CustomPainter {
+  SeriesPainter(this.series, [this.zoom = unitRect]);
 
-  final TimelineThreadResults timeline;
+  final GraphableSeries series;
   final Rect zoom;
 
-  TimelineAxisPainter horizontalAxisPainter;
-  TimelineAxisPainter verticalAxisPainter;
+  GraphAxisPainter get horizontalAxisPainter;
+  GraphAxisPainter? get verticalAxisPainter;
 
-  TimelinePainter withZoom(Rect newZoom);
+  SeriesPainter withZoom(Rect newZoom);
 
-  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / timeline.maxValue);
+  double getY(double d, Rect bounds) => bounds.bottom - bounds.height * (d / series.maxValue.value);
+
+  GraphableEvent eventNear(Offset graphRelative);
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineGraphPainter extends TimelinePainter {
-  TimelineGraphPainter(TimelineThreadResults timeline, {
+class SeriesGraphPainter extends SeriesPainter {
+  SeriesGraphPainter(GraphableSeries series, {
     Rect zoom = unitRect,
     this.showInactiveRegions = false,
   })
-      : run = timeline.wholeRun,
-        super(timeline, zoom);
+      : run = series.wholeRun,
+        super(series, zoom);
 
   final TimeFrame run;
   final bool showInactiveRegions;
 
-  TimelineHAxisTimePainter _timePainter;
-  @override
-  TimelineAxisPainter get horizontalAxisPainter => _timePainter ??= TimelineHAxisTimePainter(this);
+  // GraphableEvent? _find(TimeVal t, bool strict) {
+  //   TimeVal loT = run.start;
+  //   TimeVal hiT = run.end;
+  //   final List<GraphableEvent> frames = series.frames;
+  //   if (t < loT) {
+  //     return strict ? null : frames.first;
+  //   }
+  //   if (t > hiT) {
+  //     return strict ? null : frames.last;
+  //   }
+  //   int lo = 0;
+  //   int hi = frames.length - 1;
+  //   while (lo < hi) {
+  //     final int mid = (lo + hi) ~/ 2;
+  //     if (mid == lo) {
+  //       break;
+  //     }
+  //     final TimeVal midT = frames[mid].start;
+  //     if (t < midT) {
+  //       hi = mid;
+  //       hiT = midT;
+  //     } else if (t > midT) {
+  //       lo = mid;
+  //       loT = midT;
+  //     }
+  //   }
+  //   final GraphableEvent loEvent = frames[lo];
+  //   if (loEvent.contains(t)) {
+  //     return loEvent;
+  //   }
+  //   if (strict) {
+  //     return null;
+  //   } else {
+  //     if (lo >= frames.length) {
+  //       return loEvent;
+  //     }
+  //     final GraphableEvent hiEvent = frames[lo + 1];
+  //     return (t - loEvent.end < hiEvent.start - t) ? loEvent : hiEvent;
+  //   }
+  // }
 
-  TimelineVAxisDurationPainter _durationPainter;
+  @override GraphableEvent eventNear(Offset graphRelative) =>
+      series.eventNear(series.wholeRun.elapsedTime(graphRelative.dx));
+
+  late final GraphHAxisTimePainter _timePainter = GraphHAxisTimePainter(run, zoom);
   @override
-  TimelineAxisPainter get verticalAxisPainter => _durationPainter ??= TimelineVAxisDurationPainter(this);
+  GraphAxisPainter get horizontalAxisPainter => _timePainter;
+
+  late final GraphVAxisDurationPainter _durationPainter = GraphVAxisDurationPainter(this);
+  @override
+  GraphAxisPainter get verticalAxisPainter => _durationPainter;
 
   @override
-  TimelineGraphPainter withZoom(Rect newZoom) =>
-      TimelineGraphPainter(timeline,
-        zoom: newZoom ?? unitRect,
+  SeriesGraphPainter withZoom(Rect newZoom) =>
+      SeriesGraphPainter(series,
+        zoom: newZoom,
         showInactiveRegions: showInactiveRegions,
       );
 
-  double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width  * run.getFraction(t);
+  double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width * run.getFraction(t);
 
   Rect _getRectBar(TimeFrame f, double barY, Rect view, double minWidth) {
     double startX = getX(f.start, view);
@@ -338,8 +381,8 @@ class TimelineGraphPainter extends TimelinePainter {
     if (showInactiveRegions) {
       paint.style = PaintingStyle.fill;
       paint.color = Colors.grey.shade200;
-      TimeFrame prevFrame = timeline.first;
-      for (final TimeFrame frame in timeline.skip(1)) {
+      TimeFrame prevFrame = series.frames.first;
+      for (final TimeFrame frame in series.skip(1)) {
         final TimeFrame gap = frame.gapFrameSince(prevFrame);
         if (gap.duration.millis > 16) {
           canvas.drawRect(getMaxRect(gap, view), paint);
@@ -350,14 +393,14 @@ class TimelineGraphPainter extends TimelinePainter {
 
     // Then lines over gaps
     paint.style = PaintingStyle.stroke;
-    drawLine(canvas, size, paint, getY(timeline.average.value,   view), heatColors[0]);
-    drawLine(canvas, size, paint, getY(timeline.percent90.value, view), heatColors[1]);
-    drawLine(canvas, size, paint, getY(timeline.percent99.value, view), heatColors[2]);
+    drawLine(canvas, size, paint, getY(series.average.value,   view), heatColors[0]);
+    drawLine(canvas, size, paint, getY(series.percent90.value, view), heatColors[1]);
+    drawLine(canvas, size, paint, getY(series.percent99.value, view), heatColors[2]);
 
     // Finally frame times over lines
     paint.style = PaintingStyle.fill;
-    for (final GraphableEvent frame in timeline) {
-      paint.color = heatColors[timeline.heatIndex(frame)];
+    for (final GraphableEvent frame in series) {
+      paint.color = heatColors[series.heatIndex(frame)];
       canvas.drawRect(getRect(frame, view, minWidth), paint);
     }
   }
@@ -366,34 +409,44 @@ class TimelineGraphPainter extends TimelinePainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineDistributionPainter extends TimelinePainter {
-  TimelineDistributionPainter(TimelineThreadResults timeline, {
+class SeriesDistributionPainter extends SeriesPainter {
+  SeriesDistributionPainter(GraphableSeries series, {
     Rect zoom = unitRect,
   })
-      : run = timeline.wholeRun,
-        indices = List<int>.generate(timeline.frames.length, (int index) => index),
-        super(timeline, zoom) {
+      : run = series.wholeRun,
+        indices = List<int>.generate(series.frames.length, (int index) => index),
+        super(series, zoom) {
     indices.sort((int a, int b) {
-      return timeline.frames[a].reading.value.compareTo(timeline.frames[b].reading.value);
+      return series.frames[a].compareTo(series.frames[b]);
     });
   }
 
   final TimeFrame run;
   final List<int> indices;
 
-  TimelineAxisPercentPainter _timePainter;
   @override
-  TimelineAxisPainter get horizontalAxisPainter =>
-      _timePainter ??= TimelineAxisPercentPainter(zoom, true);
+  GraphableEvent eventNear(Offset graphRelative) {
+    int index = (graphRelative.dx * series.frameCount).floor();
+    if (index < 0) {
+      index = 0;
+    } else if (index >= indices.length) {
+      index = indices.length - 1;
+    }
+    return series.frames[indices[index]];
+  }
 
-  TimelineVAxisDurationPainter _durationPainter;
+  late final GraphAxisPercentPainter _timePainter = GraphAxisPercentPainter(zoom, true);
   @override
-  TimelineAxisPainter get verticalAxisPainter => _durationPainter ??= TimelineVAxisDurationPainter(this);
+  GraphAxisPainter get horizontalAxisPainter => _timePainter;
+
+  late final GraphVAxisDurationPainter _durationPainter = GraphVAxisDurationPainter(this);
+  @override
+  GraphAxisPainter get verticalAxisPainter => _durationPainter;
 
   @override
-  TimelineDistributionPainter withZoom(Rect newZoom) =>
-      TimelineDistributionPainter(timeline,
-        zoom: newZoom ?? unitRect,
+  SeriesDistributionPainter withZoom(Rect newZoom) =>
+      SeriesDistributionPainter(series,
+        zoom: newZoom,
       );
 
   @override
@@ -402,19 +455,19 @@ class TimelineDistributionPainter extends TimelinePainter {
     canvas.clipRect(view);
 
     canvas.translate(0, size.height);
-    canvas.scale(size.width / indices.length, -size.height / timeline.maxValue);
+    canvas.scale(size.width / indices.length, -size.height / series.maxValue.value);
     // coordinates now go from BL(0, 0) to TR(#indices, worst)
 
     canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
-    canvas.translate(-zoom.left * indices.length, (zoom.bottom - 1) * timeline.maxValue);
+    canvas.translate(-zoom.left * indices.length, (zoom.bottom - 1) * series.maxValue.value);
 
     final Paint paint = Paint();
 
     final int i0 = (zoom.left * indices.length).floor();
     final int i1 = (zoom.right * indices.length).ceil();
     for (int i = i0; i < i1; i++) {
-      final GraphableEvent frame = timeline.frames[indices[i]];
-      paint.color = heatColors[timeline.heatIndex(frame)];
+      final GraphableEvent frame = series.frames[indices[i]];
+      paint.color = heatColors[series.heatIndex(frame)];
       final double x = i.toDouble();
       canvas.drawRect(Rect.fromLTRB(x, 0, x+1, frame.reading.value), paint);
     }
@@ -424,28 +477,193 @@ class TimelineDistributionPainter extends TimelinePainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineGraphWidget extends StatefulWidget {
-  TimelineGraphWidget(this.timeline, this.closeCallback) : super(key: ObjectKey(timeline));
+class FlowGraphPainter extends SeriesPainter {
+  factory FlowGraphPainter(GraphableSeries series, {
+    Rect zoom = unitRect,
+  }) {
+    final List<int> slots = List<int>.filled(series.frameCount, 0);
+    final int numSlots = _countActive(series, slots);
+    return FlowGraphPainter._(series, zoom, slots, numSlots);
+  }
 
-  final TimelineThreadResults timeline;
-  final Function(TimelineGraphWidget) closeCallback;
+  FlowGraphPainter._(GraphableSeries series, Rect zoom, this.slots, this.numSlots)
+      : super(series, zoom);
 
-  @override State createState() => TimelineGraphWidgetState(timeline);
+  static int _countActive(GraphableSeries series, List<int> slots) {
+    final List<TimeVal?> active = <TimeVal>[];
+    // As long as the graph is over 500 pixels wide we'll ensure at least 1 pixel gap
+    final TimeVal gap = series.wholeRun.duration * (1 / 500);
+    int num = 0;
+    // first count the number of slots needed, only growing active when necessary
+    for (int i = 0; i < series.frameCount; i++) {
+      final GraphableEvent frame = series.frames[i];
+      int keep = 0;
+      for (int j = 0; j < num; j++) {
+        if (active[j]! >= frame.start) {
+          active[keep++] = active[j];
+        }
+      }
+      if (keep < active.length) {
+        active[keep] = frame.end + gap;
+      } else {
+        active.add(frame.end + gap);
+      }
+      num = keep + 1;
+    }
+
+    // next start over and place each frame in a slot in an upward "spiral"
+
+    // For some reason fillRange gets type errors filling an array with nulls in JS
+    // active.fillRange(0, active.length);
+    // So we do it manually...
+    for (int i = 0; i < active.length; i++) {
+      active[i] = null;
+    }
+    int pos = -1;
+    for (int i = 0; i < series.frameCount; i++) {
+      final GraphableEvent frame = series.frames[i];
+      pos = _nextSlot(active, pos, frame.start, frame.end + gap, TimeVal.zero);
+      slots[i] = pos;
+    }
+    return active.length;
+  }
+
+  static int _nextSlot(List<TimeVal?> active, int pos, TimeVal start, TimeVal end, TimeVal restartGap) {
+    bool restart = true;
+    for (int i = 0; i < active.length; i++) {
+      final TimeVal? t = active[i];
+      if (t != null && t + restartGap >= start) {
+        restart = false;
+        break;
+      }
+    }
+    if (restart) {
+      active[0] = end;
+      return 0;
+    }
+    for (int i = pos + 1; i < active.length; i++) {
+      final TimeVal? t = active[i];
+      if (t == null || t < start) {
+        active[i] = end;
+        return i;
+      }
+    }
+    for (int i = 0; i <= pos; i++) {
+      final TimeVal? t = active[i];
+      if (t == null || t < start) {
+        active[i] = end;
+        return i;
+      }
+    }
+    throw 'no slot to put new flow event';
+  }
+
+  final List<int> slots;
+  final int numSlots;
+
+  @override
+  GraphableEvent eventNear(Offset graphRelative) {
+    final TimeVal t = series.wholeRun.elapsedTime(graphRelative.dx);
+    final double slotY = 1 - graphRelative.dy;
+    GraphableEvent best = series.frames.first;
+    double bestDistanceSquared = double.infinity;
+    for (int i = 0; i < series.frameCount; i++) {
+      final GraphableEvent frame = series.frames[i];
+      final double dx = (t < frame.start) ? ((frame.start - t) / series.wholeRun.duration)
+          : (t > frame.end) ? ((t - frame.end) / series.wholeRun.duration)
+          : 0;
+      final double frameY = (slots[i] + 0.5) / numSlots;
+      final double dy = frameY - slotY;
+      // dx and dy are fractions relative to the total size of the graph area. The
+      // dx distances thus represent a much larger screen distance than the dy distances.
+      // So we bias the distance equation against the x distance a bit to compensate
+      final double dsq = (dx * dx * 100) + (dy * dy);
+      if (dsq < bestDistanceSquared) {
+        best = frame;
+        bestDistanceSquared = dsq;
+      }
+    }
+    return best;
+  }
+
+  double getX(TimeVal t, Rect bounds) => bounds.left + bounds.width * series.wholeRun.getFraction(t);
+
+  @override
+  FlowGraphPainter withZoom(Rect newZoom) => FlowGraphPainter(series, zoom: newZoom);
+
+  late final GraphHAxisTimePainter _timePainter = GraphHAxisTimePainter(series.wholeRun, zoom);
+  @override
+  GraphAxisPainter get horizontalAxisPainter => _timePainter;
+  @override
+  GraphAxisPainter? get verticalAxisPainter => null;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect view = Offset.zero & size;
+    canvas.clipRect(view);
+
+    canvas.scale(1.0 / zoom.width, 1.0 / zoom.height);
+    canvas.translate(-zoom.left * size.width, -zoom.top * size.height);
+
+    final Paint paint = Paint();
+
+    paint.style = PaintingStyle.fill;
+    final double barH = size.height / (numSlots + 1);
+    final double stepT = barH / 4;
+    final double stepB = stepT * 3;
+    final double barGap = size.height / numSlots;
+    for (int i = 0; i < series.frameCount; i++) {
+      final GraphableEvent frame = series.frames[i];
+      final double startX = getX(frame.start, view);
+      final double endX = getX(frame.end, view);
+      final double y = size.height - slots[i] * barGap;
+      paint.color = heatColors[series.heatIndex(frame)];
+      canvas.drawRect(Rect.fromLTRB(startX, y - barH, endX, y), paint);
+      if (frame is FlowEvent) {
+        paint.color = Colors.black;
+        for (final TimeVal step in frame.steps) {
+          final double x = getX(step, view);
+          canvas.drawRect(Rect.fromLTRB(x, y - stepB, x + 0.5, y - stepT), paint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
-  TimelineGraphWidgetState(this.timeline)
+class SeriesGraphWidget extends StatefulWidget {
+  SeriesGraphWidget(this.series, this.closeCallback) : super(key: ObjectKey(series));
+
+  final GraphableSeries series;
+  final Function(SeriesGraphWidget) closeCallback;
+
+  @override State createState() => SeriesGraphWidgetState(series);
+}
+
+class SeriesGraphWidgetState extends State<SeriesGraphWidget> {
+  SeriesGraphWidgetState(this.series)
       : _mouseKey = GlobalKey(),
         _imageKey = GlobalKey(),
         _distribution = false,
-        _painter = TimelineGraphPainter(timeline),
+        _painter = _painterFor(series),
         _hoverString = '';
 
-  final TimelineThreadResults timeline;
+  static SeriesPainter _painterFor(GraphableSeries series) {
+    switch (series.seriesType) {
+      case SeriesType.SEQUENTIAL_EVENTS:
+        return SeriesGraphPainter(series);
+      case SeriesType.OVERLAPPING_EVENTS:
+        return FlowGraphPainter(series);
+    }
+  }
+
+  final GraphableSeries series;
   final GlobalKey _mouseKey;
   final GlobalKey _imageKey;
-  FocusNode focusNode;
-  Offset _dragAnchor;
+  FocusNode? focusNode;
+  Offset _dragAnchor = Offset.zero;
   bool _distribution;
 
   @override
@@ -459,23 +677,24 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 
   @override
   void dispose() {
-    focusNode.dispose();
+    focusNode?.dispose();
+    focusNode = null;
 
     super.dispose();
   }
 
-  TimelinePainter _painter;
-  Offset _zoomAnchor;
-  GraphableEvent _hoverFrame;
+  SeriesPainter _painter;
+  Offset _zoomAnchor = Offset.zero;
+  GraphableEvent? _hoverFrame;
   String _hoverString;
 
   void _setHoverEvent(GraphableEvent newHoverFrame) {
     if (_hoverFrame != newHoverFrame) {
-      final TimeFrame e = newHoverFrame - timeline.wholeRun.start;
+      final TimeFrame e = newHoverFrame - series.wholeRun.start;
       final String start = e.start.stringSeconds();
       final String end = e.end.stringSeconds();
-      final String value = newHoverFrame.reading.valueString;
-      final String label = timeline.labelFor(newHoverFrame);
+      final String value = newHoverFrame.reading.valueString(precision: 3);
+      final String label = series.labelFor(newHoverFrame);
       setState(() {
         _hoverFrame = newHoverFrame;
         _hoverString = 'frame[$start => $end] = $value ($label)';
@@ -484,7 +703,9 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   }
 
   Offset _getWidgetRelativePosition(Offset position) {
-    final RenderBox box = _mouseKey.currentContext.findRenderObject() as RenderBox;
+    final RenderBox? box = _mouseKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null)
+      return position;
     final Offset mousePosition = box.globalToLocal(position);
     return Offset(mousePosition.dx / box.size.width, mousePosition.dy / box.size.height);
   }
@@ -541,8 +762,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
   void _onHover(Offset position) {
     final Offset relative = _getViewRelativePosition(position);
     _zoomAnchor = relative;
-    final TimeVal t = timeline.wholeRun.elapsedTime(relative.dx);
-    final GraphableEvent e = timeline.eventNear(t);
+    final GraphableEvent e = _painter.eventNear(relative);
     _setHoverEvent(e);
   }
 
@@ -550,8 +770,8 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     setState(() {
       _distribution = newDistribution;
       _painter = _distribution
-          ? TimelineDistributionPainter(timeline)
-          : TimelineGraphPainter(timeline);
+          ? SeriesDistributionPainter(series)
+          : _painterFor(series);
     });
   }
 
@@ -609,7 +829,7 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 //    anchor.remove();
 //  }
 
-  bool _onKey(RawKeyEvent keyEvent) {
+  KeyEventResult _onKey(RawKeyEvent keyEvent) {
     if (keyEvent is RawKeyDownEvent) {
       if (keyEvent.logicalKey.keyLabel == 'r') {
         _reset();
@@ -629,11 +849,11 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
 //        _capture();
       } else {
         print('unrecognized: ${keyEvent.logicalKey.keyLabel}');
-        return false;
+        return KeyEventResult.ignored;
       }
-      return true;
+      return KeyEventResult.handled;
     } else {
-      return false;
+      return KeyEventResult.ignored;
     }
   }
 
@@ -662,11 +882,11 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
     );
 
     final Widget annotatedGraph = MouseRegion(
-      onEnter: (_) => focusNode.requestFocus(),
-      onExit: (_) => focusNode.unfocus(),
+      onEnter: (_) => focusNode!.requestFocus(),
+      onExit: (_) => focusNode!.unfocus(),
       onHover: (PointerHoverEvent e) => _onHover(e.position),
       child: RawKeyboardListener(
-        focusNode: focusNode,
+        focusNode: focusNode!,
         child: ForcedPanDetector(
           onDoubleTap: _reset,
           onPanDown: _dragDown,
@@ -681,17 +901,17 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
         children: <Widget>[
           Container(alignment: Alignment.center, color: color, width: 12, height: 12,),
           Container(width: 10),
-          Text('$name: ${value.valueString}'),
+          Text('$name: ${value.valueString(precision: 3)}'),
         ],
       );
     }
     final Row legend = Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: <Widget>[
-        _makeLegendItem('average value',   timeline.average,   heatColors[0]),
-        _makeLegendItem('90th percentile', timeline.percent90, heatColors[1]),
-        _makeLegendItem('99th percentile', timeline.percent99, heatColors[2]),
-        _makeLegendItem('worst value',     timeline.worst,     heatColors[3]),
+        _makeLegendItem('average value',   series.average,   heatColors[0]),
+        _makeLegendItem('90th percentile', series.percent90, heatColors[1]),
+        _makeLegendItem('99th percentile', series.percent99, heatColors[2]),
+        _makeLegendItem('worst value',     series.worst,     heatColors[3]),
       ],
     );
 
@@ -702,14 +922,14 @@ class TimelineGraphWidgetState extends State<TimelineGraphWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Text('Frame ${timeline.titleName} Times', style: const TextStyle(fontSize: 24),),
+              Text(series.titleName, style: const TextStyle(fontSize: 24),),
               IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => widget.closeCallback(widget),
               ),
               Checkbox(
                 value: _distribution,
-                onChanged: (bool value) => _setDistribution(value),
+                onChanged: (bool? value) => _setDistribution(value!),
               ),
               const Text('Distribution style graph'),
             ]

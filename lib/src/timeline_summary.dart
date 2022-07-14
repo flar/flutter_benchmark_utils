@@ -53,10 +53,12 @@ class ThreadInfo {
 class TimelineThreadResults extends GraphableSeries {
   factory TimelineThreadResults.fromSummaryMap(Map<String,dynamic> jsonMap, ThreadInfo threadInfo) {
     final UnitValue worst = _getTimeVal(jsonMap, threadInfo.worstKey);
+    final List<GraphableEvent> frames = _getFrameListMicros(jsonMap, threadInfo.startKey, threadInfo.durationKey);
     return TimelineThreadResults._internal(
       titleName:  threadInfo.titleName,
       seriesType: SeriesType.SEQUENTIAL_EVENTS,
-      frames:     _getFrameListMicros(jsonMap, threadInfo.startKey, threadInfo.durationKey),
+      frames:     frames,
+      wholeRun:   TimeFrame(start: frames.first.start, end: frames.last.end),
       average:    _getTimeVal(jsonMap, threadInfo.averageKey),
       percent90:  _getTimeVal(jsonMap, threadInfo.percent90Key),
       percent99:  _getTimeVal(jsonMap, threadInfo.percent99Key),
@@ -71,10 +73,8 @@ class TimelineThreadResults extends GraphableSeries {
     required String titleName,
     required String eventKey
   }) {
-    final List<GraphableEvent> frames = _getSortedFrameListFromEvents(eventList, eventKey);
-    if (frames.isEmpty) {
-      throw 'No $eventKey events found in trace';
-    }
+    TimeFrame run = _getEventRange(eventList);
+    final List<GraphableEvent> frames = _getSortedFrameListFromEvents(eventList, run, eventKey);
     final List<GraphableEvent> immutableFrames = List<GraphableEvent>.unmodifiable(frames);
 
     // Then sort by duration for statistics
@@ -83,6 +83,7 @@ class TimelineThreadResults extends GraphableSeries {
       titleName:  '$titleName ${frames.first.reading.units.upperPluralDescription}',
       seriesType: frames.first is FlowEvent ? SeriesType.OVERLAPPING_EVENTS : SeriesType.SEQUENTIAL_EVENTS,
       frames:     immutableFrames,
+      wholeRun:   run,
       average:    GraphableSeries.computeAverage(frames),
       percent90:  GraphableSeries.locatePercentile(frames, 90).reading,
       percent99:  GraphableSeries.locatePercentile(frames, 99).reading,
@@ -96,6 +97,7 @@ class TimelineThreadResults extends GraphableSeries {
     required this.titleName,
     required this.seriesType,
     required this.frames,
+    required this.wholeRun,
     required this.average,
     required this.percent90,
     required this.percent99,
@@ -138,6 +140,7 @@ class TimelineThreadResults extends GraphableSeries {
   @override final UnitValue worst;
   @override final UnitValue largest;
   @override final List<GraphableEvent> frames;
+  @override final TimeFrame wholeRun;
 
   @override final UnitValue minRange;
 
@@ -211,7 +214,7 @@ class TimelineThreadResults extends GraphableSeries {
             }
             break;
           case 'C':
-            if (name == 'DiffContext' || name == 'RasterCache') {
+            if (name == 'DiffContext' || name == 'RasterCache' || name == 'LayerTree::Usage') {
               final Map<String,dynamic> args = event['args'] as Map<String,dynamic>;
               keys.addAll(args.keys.map((String key) => '$name:$key'));
             }
@@ -231,17 +234,57 @@ class TimelineThreadResults extends GraphableSeries {
     ];
   }
 
-  static List<GraphableEvent> _getSortedFrameListFromEvents(List<dynamic> eventList, String key) {
+  static TimeFrame _incorporate(TimeFrame? run, TimeVal event) {
+    run ??= TimeFrame(start: event, end: event);
+    if (event < run.start) {
+      run = TimeFrame(start: event, end: run.end);
+    }
+    if (event > run.end) {
+      run = TimeFrame(start: run.start, end: event);
+    }
+    return run;
+  }
+
+  static TimeFrame _getEventRange(List<dynamic> eventList) {
+    TimeFrame? run;
+    for (final dynamic rawEvent in eventList) {
+      final Map<String,dynamic> event = rawEvent as Map<String,dynamic>;
+      switch (event['ph'] as String) {
+        case 'B':
+        case 'b':
+        case 'E':
+        case 'e':
+        case 's':
+        case 't':
+        case 'f':
+        case 'C':
+        case 'i':
+          run = _incorporate(run, TimeVal.fromMicros(event['ts'] as num));
+          break;
+        case 'X':
+          final TimeVal completeStartMicros = TimeVal.fromMicros(event['ts'] as num);
+          final TimeVal completeDurationMicros = TimeVal.fromMicros(event['dur'] as num);
+          run = _incorporate(run, completeStartMicros);
+          run = _incorporate(run, completeStartMicros + completeDurationMicros);
+          break;
+      }
+    }
+    return run ?? TimeFrame(start: TimeVal.zero, end: TimeVal.zero);
+  }
+
+  static List<GraphableEvent> _getSortedFrameListFromEvents(List<dynamic> eventList, TimeFrame run, String key) {
     final List<GraphableEvent> frames = <GraphableEvent>[];
-    TimeVal? startMicros;
+    List<TimeVal> nestedStarts = <TimeVal>[];
     final Map<int,TimeVal> flowStarts = <int,TimeVal>{};
     final Map<int,List<TimeVal>> flowSteps = <int,List<TimeVal>>{};
     final String name = key.startsWith('DiffContext:') ? 'DiffContext' :
-                        key.startsWith('RasterCache:') ? 'RasterCache' : key;
+                        key.startsWith('RasterCache:') ? 'RasterCache' :
+                        key.startsWith('LayerTree::Usage:') ? 'LayerTree::Usage': key;
     final String argKey = key == 'GpuUsage' ? 'gpu_usage'
         : key == 'CpuUsage' ? 'total_cpu_usage'
         : key.startsWith('DiffContext:') ? key.substring(12)
         : key.startsWith('RasterCache:') ? key.substring(12)
+        : key.startsWith('LayerTree::Usage:') ? key.substring(17)
         : 'Unknown';
     for (final dynamic rawEvent in eventList) {
       final Map<String,dynamic> event = rawEvent as Map<String,dynamic>;
@@ -249,38 +292,58 @@ class TimelineThreadResults extends GraphableSeries {
         switch (event['ph'] as String) {
           case 'B':
           case 'b':
-            startMicros = TimeVal.fromMicros(event['ts'] as num);
+            if (nestedStarts.isNotEmpty) {
+              print('events are nested');
+            }
+            nestedStarts.add(TimeVal.fromMicros(event['ts'] as num));
             break;
           case 'E':
           case 'e':
-            if (startMicros != null) {
-              final TimeVal endMicros = TimeVal.fromMicros(event['ts'] as num);
-              frames.add(MillisDurationEvent(start: startMicros, end: endMicros));
-              startMicros = null;
+            final TimeVal endMicros = TimeVal.fromMicros(event['ts'] as num);
+            if (nestedStarts.isNotEmpty) {
+              frames.add(MillisDurationEvent(start: nestedStarts.removeLast(), end: endMicros));
+            } else {
+              print('mismatched end event for $name');
+              frames.add(MillisDurationEvent(start: run.start, end: endMicros));
             }
             break;
           case 's':
             final String idString = event['id'] as String;
             final int id = int.parse(idString, radix: 16);
+            if (flowStarts[id] != null) {
+              print('replacing phantom flow start time for $id');
+            }
             flowStarts[id] = TimeVal.fromMicros(event['ts'] as num);
-            flowSteps[id] = <TimeVal>[];
+            if (flowSteps[id] == null) {
+              flowSteps[id] = <TimeVal>[];
+            }
             break;
           case 't':
             final String idString = event['id'] as String;
             final int id = int.parse(idString, radix: 16);
+            final TimeVal stepTime = TimeVal.fromMicros(event['ts'] as num);
             final List<TimeVal>? steps = flowSteps[id];
-            if (steps != null) {
-              steps.add(TimeVal.fromMicros(event['ts'] as num));
+            if (steps == null) {
+              // We are missing a start. Fill in a dummy so that we can at least track the
+              // steps and end of flow.
+              print('inserting phantom flow start time for $id');
+              flowStarts[id] = run.start;
+              flowSteps[id] = [stepTime];
+            } else {
+              steps.add(stepTime);
             }
             break;
           case 'f':
             final String idString = event['id'] as String;
             final int id = int.parse(idString, radix: 16);
             final TimeVal? flowStart = flowStarts.remove(id);
+            final TimeVal endMicros = TimeVal.fromMicros(event['ts'] as num);
             if (flowStart != null) {
               final List<TimeVal> steps = flowSteps.remove(id)!;
-              final TimeVal endMicros = TimeVal.fromMicros(event['ts'] as num);
               frames.add(FlowEvent(start: flowStart, end: endMicros, steps: steps));
+            } else {
+              frames.add(FlowEvent(start: run.start, end: endMicros, steps: const <TimeVal>[]));
+              print('mismatched flow end event for $id');
             }
             break;
           case 'X':
@@ -315,6 +378,17 @@ class TimelineThreadResults extends GraphableSeries {
                         break;
                     }
                     break;
+                  case 'LayerTree::Usage':
+                    switch (argKey) {
+                      case 'PictureCount':
+                        graphEvent = PictureCounterEvent(measurementTime: measurementUs, count: value);
+                        break;
+                      case 'PictureKBytes':
+                        print('making a memory event');
+                        graphEvent = MemorySizeEvent.kilobytes(measurementTime: measurementUs, size: value);
+                        break;
+                    }
+                    break;
                   default:
                     graphEvent = PercentUsageEvent(measurementTime: measurementUs, percent: value);
                     break;
@@ -332,6 +406,12 @@ class TimelineThreadResults extends GraphableSeries {
           }
         }
       }
+    }
+    for (int id in flowStarts.keys) {
+      final TimeVal flowStart = flowStarts[id]!;
+      final List<TimeVal> steps = flowSteps.remove(id)!;
+      frames.add(FlowEvent(start: flowStart, end: run.end, steps: steps));
+      print('manually ending flow $id with ${steps.length} steps');
     }
     frames.sort(TimeFrame.startOrder);
     return frames;
@@ -379,13 +459,16 @@ class TimelineResults extends GraphableSeriesSource {
     if (rawEvents is List) {
       for (final dynamic event in rawEvents) {
         if (event is! Map<String,dynamic>) {
+          print('not an event: $event');
           return false;
         }
       }
       final List<String> eventKeys = TimelineThreadResults.getEventKeys(rawEvents);
-      return eventKeys.contains(ThreadInfo.build.titleName)
-          && eventKeys.contains(ThreadInfo.render.titleName);
+      return true;
+      // return eventKeys.contains(ThreadInfo.build.titleName)
+      //     && eventKeys.contains(ThreadInfo.render.titleName);
     }
+    print('not a list: $rawEvents');
     return false;
   }
 

@@ -362,7 +362,7 @@ class MemorySizeEvent extends GraphableEvent {
 
   @override final UnitValue reading;
 
-  @override UnitValue get minRange => MemoryUnits.oneMegabyte;
+  @override UnitValue get minRange => MemoryUnits.oneKilobyte;
 }
 
 enum SeriesType {
@@ -381,10 +381,10 @@ abstract class GraphableSeries extends Iterable<GraphableEvent> {
   UnitValue get worst;
   UnitValue get largest;
 
-  TimeVal get start => frames.first.start;
-  TimeVal get end => frames.last.end;
-  TimeVal get duration => end - start;
-  TimeFrame get wholeRun => TimeFrame(start: start, end: end);
+  TimeVal get start => wholeRun.start;
+  TimeVal get end => wholeRun.end;
+  TimeVal get duration => wholeRun.duration;
+  TimeFrame get wholeRun;
 
   UnitValue get minRange;
   UnitValue get maxValue => UnitValue.max(largest, minRange);

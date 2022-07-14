@@ -119,6 +119,7 @@ class MeminfoSeries extends GraphableSeries {
   @override SeriesType get seriesType => SeriesType.SEQUENTIAL_EVENTS;
 
   @override final List<GraphableEvent> frames;
+  @override TimeFrame get wholeRun => TimeFrame(start: frames.first.start, end: frames.last.end);
 
   @override final UnitValue average;
   @override final UnitValue percent90;

@@ -50,15 +50,23 @@ The executable will continue to run and host the URLs until you type `q` to quit
 ## graphTimeline
 
 Run any timeline_summary benchmark using the benchmark tools in the Flutter dev/devicelab
-directory, and then:
+directory, and then graph either the summary or the event trace file that it leaves behind:
 ```shell
-pub global run flutter_benchmark_utils:graphTimeline test.timeline_summary.json
+pub global run flutter_benchmark_utils:graphTimeline test.timeline_summary.json [--no-web]
+pub global run flutter_benchmark_utils:graphTimeline test.timeline.json
 ```
 or with the pub global bin directory in your path:
 
 ```shell
-graphTimeline test.timeline_summary.json [--web]
+graphTimeline test.timeline_summary.json [--no-web]
+graphTimeline test.timeline.json
 ```
+
+The full trace files (ending in "timeline.json") contain every Chrome Tracing event that
+was emitted during the run and allow you to graph any of those event streams, but they
+only work in the web version of the tool, not the JavaScript variant. The summary files
+only contain build/render thread times and are much more limited in terms of graphs
+they can provide.
 
 The script behaves analogously to the graphAB script in terms of launching a browser and
 quitting.
@@ -70,31 +78,3 @@ JavaScript mechanism. The web version improves upon the original by opening only
 a single page to view multiple timeline files, switchable using a drop-down menu item in
 the title bar, and it also supports graphing from raw event timeline files - allowing you
 to graph any of the event streams in the file, not just the frame Build and Render timings.
-
-## graphDashboard
-
-An alternative graphing of the go/flutter-dashboard benchmark dashboard can be launched
-using the command:
-
-```shell
-pub global run flutter_benchmark_utils:graphDashboard
-```
-or with the pub global bin directory in your path:
-
-```shell
-graphDashboard
-```
-
-This version of the dashboard has a number of additional filtering tools that can be
-accessed using the "sort by" icon in the upper right of the page as well as scrollable
-timeline histories for individual benchmarks if you double click on the benchmark tile.
-
-There are also tiles that show all 4 "build time" or "rasterizer time" metrics overlaid
-into a single graph.
-
-The benchmark histories can also navigate forward/back by a single commit if you click
-on the graph to lock in a result and then use the navigation arrows next to the commit
-and creation date below the graph.
-
-There are 2 sliders that allow you to slide the window back and forth (the slider with
-a single thumb) or to change the size of the window (the slider with two thumbs).
